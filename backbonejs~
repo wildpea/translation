@@ -236,75 +236,7 @@ isValie	model.isValid()
 
 url	model.url()
 	返回可能存在在服务器上的模型资源的相对路径。如果你的模型存在其它地方，用正确的逻辑来重载这个方法。生成如下格式的URL："/[collection.url][id]"，如果模型不是集合的一部分，将返回"/[urlRoot]/id"。
-	由于要使用到Collection#url来生成URL，确保你定义过它。如果所有模型公用一个公共的URL，也可以使用urlRoot属性。id为101的模型，存储在Backbone.Collection中的url为"/documents/7/nots"，其URL为："/documents/7/notes/101"
-
-urlRoot	model.urlRoot or model.urlRoot()
-	如果你在集合外使用模型，通过定义urlRoot，可以获取到基于模型id的默认url方法。"/[urlRoot]/id"注意到urlRoot同样可以定义为一个方法
-	var Book = Backbone.Model.extend({urlRoot: '/books'});
-	var solaris = new Book({id: "1083-lem-solaris"});
-	alert(solaris.url());
-
-parse	model.parse(response)
-	只要从服务器端返回了模型，如fetch和save方法，就会调用parse方法。该方法传递一个response对象，并返回应该set到模型中的参数列表。默认情况下执行一个空操作，传递JSON响应。如果你要调用已存在的API，或者为将响应放在命名空间中，你可以重载它。
-	如果你的后台是Rails，你可能会注意到Rails默认的to_json实现包含命名空间下的模型。为了无缝整合Backbone使该特性无效：
-	ActiveRecord::Base.include_root_in_json = false
-
-clone	model.clone()
-	返回具有相同属性的新的模型实例。
-
-isNew	model.isNew()
-	该模型已经保存到服务器端了吗？如果模型没有id属性，它将被视为是新的。
-
-change	model.change()
-	手动触发“change”事件，和每一个改变了的属性的“change:attribute”事件。如果你在set方法中传递了{silent: true}，为了快速整合模型，你需要在完成的时候调用model.change()方法。
-
-hasChanged	model.hasChanged([attribute])
-	上一次“change”事件以来，模型被改变了吗？如果传递了attribute参数，如果该属性被改变了时，将会返回true。
-	注意到该方法和以下与change有关的方法，仅在“change”事件周期内有效。
-	book.on("change", function(){
-		if (book.hasChanged("title")){
-			...
-		}
-	});
-
-changeAttributes	model.changedAttributes([attributes])
-	检索模型中被改变的属性列表。或者，可以传入一个外部attributes，返回外部属性列表中与模型中布同的属性。这可用于指出视图中哪一部分需要更新，或者与服务器端同步需要哪些操作。
-
-previous	model.previous(attribute)
-	在“change”事件中，该方法可用于获取属性改变前的值
-	var bill = new Backbone.Model({
-		name: "Bill Smith"
-	});
-	bill.on("change:name", fucntion(model, name){
-		alert("Changed name from " + bill.previous("name") + " to " + name)
-	});
-	bill.set({name: "Bill Jones"});
-
-previousAttributes	model.previousAttributes()
-	返回模型先前属性的一份拷贝。在比较模型不同版本时，和在产生错误而要返回到上一个正确状态时很有用
-
-
-
-
-Backbone.Collection
-	Collections是模型的有序集合。你可以绑定一个“change”事件来获知集合中的模型被改变了，监听“add”和“remove”事件，从服务器端fetch集合，并使用Underscore.js中的一系列有用的方法。
-	为了方便，任何在集合中触发模型的事件，都将直接在集合中触发。这允许你在集合中监听任意模型的某属性，例如：Documents.on("change:selected", ...)
-
-extend	Backbone.Collection.extend(properties, [classProperties])
-	通过扩展Backbone.Collection来创建你自己的Collection类，提供properties的实例，同样还有可选的classProperties将直接扩展到集合的构造函数方法中。
-
-model	collection.model
-	重载该方法，来定义集合拥有的模型类。如果定义了，你可以给add、crete、reset方法传递属性对象，属性将会变为该类型
-	var Library = Backbone.Collection.extend({
-		model: Book
-	});
-
-constructor/initialize	new Collection([models], [options])
-	创建集合的时候，你可以传初始化的模型数组。集合的comparator方法也可以作为option的一部分。如果你定义了一个initialize方法，在集合创建的时候，将会调用它
-	var tab = new TabSet([tab1, tab2, tab3]);
-
-models
-	
+	由于要使用到Collection#url来生成URL，确保你定义过它，或者拥有一个urlRoot属性。如果所有模型公用一个公共的URL，也可以通过
 	
 	
 	
