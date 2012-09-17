@@ -11,7 +11,7 @@
 简介
 	在构建需要大量使用JavaScript的web应用时，你需要注意的头等大事是停止把数据绑定到DOM上。经常会导致使用大量jQuery选择器和回调函数，使得程序看起来一团糟，并在HTML UI、你到Javascript逻辑和服务器数据库之间保存保持同步而发疯。对于客户端富应用而言，一个更结构化到解决方案通常很有帮助。
 	使用Backbone，你把数据存在Models中，它可以被创建、验证、销毁、把数据保存到服务器端。当UI交互导致Models中到属性发生变化时，模型触发一个"change"事件；所有显示模型状态的Views都可以监听到这一事件，并能据此作出反应，用新数据重新渲染。在一个完整的Backbone app中，你不需要写胶合代码查看DOM，并通过id来查找元素，并手工更新HTML——当模型发生变化时，视图会自己更新自己。
-	如果你是新手，并且不是确切的知道Backbone到底是做什么的，可以从 基于Backbone做的项目列表 开始。
+	(如果你是新手，并且不是确切的知道Backbone到底是做什么的，可以从 基于Backbone做的项目列表 开始。
 	下面的大部分代码都是可以运行的，单击play按钮来执行它们。
 
 升级到0.9
@@ -87,7 +87,7 @@ Extend	Backbone.Model.extend(properties, [classProperties])
 			return true;
 		}
 	});
-	var PrivateNote = Note.extend({
+	*var PrivateNote = Note.extend({
 		allowedToEdit: function(account){
 			return account.owns(this);
 		}
@@ -211,7 +211,7 @@ validate	model.validate(attributes)
 		validate: function(attrs) {
 			if (attrs.end < attrs.start) {
 				return "can't end before it starts";
-			}
+			)}
 		}
 	});
 	var one = new Chapter({
@@ -294,38 +294,108 @@ extend	Backbone.Collection.extend(properties, [classProperties])
 	通过扩展Backbone.Collection来创建你自己的Collection类，提供properties的实例，同样还有可选的classProperties将直接扩展到集合的构造函数方法中。
 
 model	collection.model
-	重载该方法，来定义集合拥有的模型类。如果定义了，你可以给add、crete、reset方法传递属性对象，属性将会变为该类型
+	重载该方法来定义集合中的模型类。如果定义了该函数，你可以给add、create、reset方法传一组属性数组，属性将会自动转换为相应的模型。
 	var Library = Backbone.Collection.extend({
-		model: Book
+		model: Boook
 	});
 
-constructor/initialize	new Collection([models], [options])
-	创建集合的时候，你可以传初始化的模型数组。集合的comparator方法也可以作为option的一部分。如果你定义了一个initialize方法，在集合创建的时候，将会调用它
-	var tab = new TabSet([tab1, tab2, tab3]);
+constructor/initialize	new Collection([model], [options])
+	创建集合时，你可以传递初始化的model数组。接受集合comarator方法作为option的一项。如果你定义了initialize方法，将在集合创建好之后调用。
+	var tabs = new TabSet([tab1, tab2, tab3]);
 
-models
-	
-	
-	
-	
-	
-	
+models	collection.models
+	获取到集合中的JavaScript数组类型的模型。通常清空下，使用get, at, 或者Underscore中定义的方法来获取模型对象，但偶尔也需要直接获取到模型
+
+toJSON	collection.toJSON()
+	返回集合中每一个模型的属性列表。这可用于将集合作为一个整体序列化或者持久化。该方法的名字可能具有一定的迷惑性，由于涉及到JavaScript的JSON API.
+	var collection = new Backbone.Collection([
+		{name: "Tim", age: 5},
+		{name: "Ida", age: 26},
+		{name: "Rob", age: 55}
+	]);
+	alert(JSON.stringify(collection));
 
 
+Underscore Methods
+	Backbone在Backbone.Collection中使用Underscore.js中提供28个迭代函数。他们并未全部列举在下，查看细节，可查看Underscore文档
+	forEach	(each) 
+	map
+	reduce(foldl, inject)
+	reduceRight(foldr)
+	find(detect)
+	filter(select)
+	reject
+	every(all)
+	some(any)
+	include
+	invoke
+	max
+	min
+	sortBy
+	groupBy
+	sortedIndex
+	shuffle
+	toArray
+	size
+	first
+	initial
+	reset
+	last
+	without
+	lastIndexOf
+	isEmpty
+	chain
+	Books.each(function(book){
+		book.publish();
+	});
+	var titles = Books.map(function(book){
+		return book.get("title");
+	});
+	var publishedBooks = Books.fiter(function(book){
+		return book.get("publish") === true;
+	});
+	var alphabetical = Books.sortBy(function(book){
+		return book.author.get("name").toowerCase();
+	});
 
+add collection.add(model, [options])
+	向集合中增加一个（或一组）模型。将触发“add”事件，你可以通过传递{silent:true}来避免。如果模型属性已经定义，你还可以传递属性对象，用来实例化模型。传递{at:index}在集合的index处拼接模型。同样，如果你在集合的“add”事件中定义了回调函数，options.index将指定在集合的哪个位置增加模型。
+	var ships = new Backbone.Collection;
+	ships.on("add", function(){
+		alert("Ahoy" + ship.get("name") + "!");
+	});
+	shipes.add([
+		{name: "Flying Dutchman"},
+		{name: "Black Pearl"}
+	]);
 
-	
-	
-	
-	
-	
-	
-	
-	
-	
-	
-	
-	
-	
-	
-	
+remove collection.remove(models, [options])
+	从集合中删除一个（或一组）模型。将触发“remove”事件，你可以通过传递silent来避免。如果为“remove”事件绑定了回调函数，可以通过optioins.index指定集合中的哪个模型将被移除。
+
+get	collection.get(id)
+	根据id，获取集合中的一个模型。
+	var book = Library.get(110);
+
+getByCid	collection.getByCid(cid)
+	根据client id获取集合中的一个模型。client id是模型的.cid属性，在模型创建的时候自动分配的。在模型还没有被保存到服务器端，而没有获得真正的id时，这很有用。
+
+at collection.at(index)
+	根据索引，从集合中获得一个模型。在模型排好序时这很有用。如果集合中的模型没有排好序，at将返回模型插入集合的顺序。
+
+push	collection.push(model, [options])
+	向集合的末尾添加一个模型。options同add方法。
+
+pop	collection.pop([options])
+	删除并返回集合末尾的模型。options同add方法。
+
+unshift	collection.unshift(model, [option])
+	向集合的头部添加一个模型。options同add方法。
+
+shift	collection.shift([options])
+	删除并返回集合头部的模型。options和add方法一样。
+
+length	collection.length
+	向一个数组一样，集合维护一个length属性，计算集合中包含的模型数。
+
+comparator	collection.comparator
+	默认情况下，集合没有comparator方法。如果你定义了一个comparator，它将用于保持集合是已序的。这意味着，模型添加到集合中时，将已正确的排序添加到collection.models中去。comparator方法
