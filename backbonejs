@@ -398,4 +398,54 @@ length	collection.length
 	向一个数组一样，集合维护一个length属性，计算集合中包含的模型数。
 
 comparator	collection.comparator
-	默认情况下，集合没有comparator方法。如果你定义了一个comparator，它将用于保持集合是已序的。这意味着，模型添加到集合中时，将已正确的排序添加到collection.models中去。comparator方法
+	默认情况下，集合没有comparator方法。如果你定义了一个comparator，它将用于保持集合是已序的。这意味着，模型添加到集合中时，将已正确的排序添加到collection.models中去。comparator方法可被定义成一个sortBy（参数为只有一个参数的函数），或者一个sort（参数为两个参数的比较函数）。
+	“sortBy”比较方法，传入一个模型，返回一个数字或者字符串，通过该值表面该模型与其他模型的顺序。“sort”方法接收两个模型，如果第一个模型应该排在第二个的前面返回-1，如果两个模型顺序相等返回0，如果第一个排在第二个后面返回1.
+	注意到接下来的例子中，无论章节以什么样的顺序加入进来，都将以正确的顺序输出。
+	var Chapter = Backbone.Model;
+	var chapters = new Backbone.Collection;
+	chapters.comparator = function(cahpter){
+		return chapter.get("page");
+	}
+	chapters.add(new Chapter({page: 9, title: "The End"}));
+	chapters.add(new Chapter({page: 5, title: "The Middle"}));
+	chapters.add(new Chapter({page: 1, title: "The Beginning"}));
+	alert(chapters.pluck("title"));
+	有比较方法的集合不会自动为以前添加的模型属性排序，你需要在改变了可能影响到模型顺序的属性后，调用sort方法。
+
+sort	collection.sort([options])
+	强制冲排序一个集合。通常情况下，拥有comparator方法的集合会自动维护顺序，而不需要你调用该方法。除非传递{silent: true},sort方法将会触发集合的“reset”事件。
+
+pluck	collection.pluck(attribute)
+	从集合中的所有模型中获取一个属性。和调用map方法一样，从iterator中返回一个属性。
+	var stooges = new Backbone.Collection([
+		{name: "Curly"},
+		{name: "Larry"},
+		{name: "Moe"}
+	]);
+	var names = stooges.pluck("name");
+	alert(JSON.stringify(names));
+
+where	collection.where(attributes)
+	返回集合中符合attributes条件的模型。适用于单一条件的filter。
+	var friends = new Bacbone.Collection([
+		{name: "Athos", job: "Musketeer"},
+		{name: "Porthos", job: "Musketeer"},
+		{name: "Aramis", job: "Musketeer"},
+		{name: "d'Artagnan", job: "Guard"}
+	]);
+	var musketeers = frieds.where({job: "Musketeer"});
+	alert(musketeers.length);
+
+url	collection.url or collection.url()
+	设置集合引用在服务器上的url属性（或函数）。集合中的模型使用url或者自己的URL构造函数
+	var Notes = Backbone.extend({
+		url: '/notes'
+	});
+	var Notes = Backbone.Collection.extend({
+		url: function() {
+			return this.documnet.url() + '/notes';
+		}
+	});
+
+parse	collection.parse(response)
+	任何时候集合中的模型从服务器返回，如fetch，都将调用parse。该方法传递一个response对象，并返回一组即将添加到集合中的模型属性。
