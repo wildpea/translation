@@ -531,8 +531,7 @@ route	router.toute(route, name, [callback])
 	为router手动创建route。route参数可以是一个routing字符串，或者一个正则表达式。和route或者正则表达式匹配的部分将会作为参数传回到回调函数中。只要route匹配上了，name参数将触发一个"route:name"事件。如果省略了callback参数，默认将会使用router[name]。
 	initialize: function(options){
 		this.route("page/:number", "page", function(number){...});
-		this.route(/^(.*?)\/open$/, "oprn");
-	},
+		this.route(/^(.*?)\/open$/, "oprn"); },
 	open: function(){...}
 
 navigete	router.navigate(fragment, [options])
@@ -545,3 +544,27 @@ navigete	router.navigate(fragment, [options])
 	app.navigate("help/troubleshooting", {trigger: true});
 	# or
 	app.navigate("help/troubleshooting", {trigger: true, replace: true});
+
+
+
+
+Backbone.sync
+	Backbone.sync，是每次Backbone尝试从服务器端获取或者保存模型时，都会调用的方法。默认，会使用（jQuery/Zepto）.ajax发起rest风格的JSON请求，并返回一个jqXHR。如果你要使用不同的持久化策略，比如WebSorckets，XML传递，或者Local Storage，你可以重载该方法。
+	Backbone.sync方法的签名是sync(method, model, [options])
+	.method——CRUD方法（"create", "read", "update", "delete"）
+	.model——将要保存的模型（或者要都取的集合）
+	.options——sucess和error回调函数，以及其它的jQuery请求参数
+	默认实现中，当Backbone.sync发起一个请求保存模型时，将传递模型的属性，并被序列化为JSON格式，且HTTP请求中content-type为application/json。返回JSON响应的时候，将返回被服务器修改过的，需要更新到客户端的模型属性。当响应集合的"read"请求，将发送一组模型属性对象。
+	sync方法可被全局重载为Backbone.sync，或者更好的，给一个Backbone集合或者一个独立的模型添加sync方法。
+	默认的sync为CRUD和REST提供映射：
+	.create——>POST	/collection
+	.read——>GET	/collection[/id]
+	.update——>put	/collection/id
+	.delet——>DELETE	/collection/id
+	例如，Rails中，响应Backbone的"update"调用可能是这样的（实际编程时，不要盲目使用update_attributes，而应该总是使用白名单来进行访问控制）
+	def update
+		account = Account.find params[:id]
+		account.update_attributes params
+		render :json => account
+	end
+	集成到Rails的另一个提示：设置ActiveRecord::Base.include_root_in_json = false，关闭默认命名空间下的to_json方法。
