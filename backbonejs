@@ -448,4 +448,100 @@ url	collection.url or collection.url()
 	});
 
 parse	collection.parse(response)
-	任何时候集合中的模型从服务器返回，如fetch，都将调用parse。该方法传递一个response对象，并返回一组即将添加到集合中的模型属性。
+	任何时候集合中的模型从服务器返回，如fetch，都将调用parse。该方法传递一个response对象，并返回一组即将添加到集合中的模型属性。默认的实现无参数，仅传递JSON返回。如果你需要使用已有的API，或者使用命名管理，你需要重载它。注意到，如果你模型中有了一个parse方法，将会在每次获取模型时调用。
+	var Tweets = Backbone.Collection.extend({
+		parse: function(response){
+			return response.results;
+		}
+	});
+
+fetch	collectioin.fetch([options])
+	从服务器端获取集合中模型的默认设置，并在拿到数据后重置集合。options散列表将传递有(collection, response)参数的success和error方法。当服务器返回模型数据时，集合将被重置。在自定义持久化下将触发Backbone.sync，并返回一个jqXHR。服务器的fetch请求句柄将返回一个JSON格式的一组模型。
+	Backbone.sync = function(method, model){
+		alert(method + ": " + model.url);
+	};
+	var Accounts = new Backbone.Collection;
+	Accounts.url = '/accounts';
+	Accounts.fetch();
+	如果你希望为当前集合增加新模型，而不是替换掉集合内容，option中传递{add: true}。
+	fetch的option中还可以传递jQuery.ajax，这样可以只获取已标记页码的集合中的一页：Documents.fetch({data: {page: 3}})
+	注意到fetch不应该用来在页面下载时填充集合——所有在下载时需要的模型应该已经存在了。fetch主要用于页面不是立即需要模型情况下的延迟加载：例如，文档中一个备注集合，可能被打开或关闭。
+
+reset	collection.reset(models, [options])
+	一次性添加和删除模型总是好的。但有时由于模型太多，你可能更愿意部分更新集合。使用reset，用一组新模型（或者属性列表）更新集合，在最后将触发一个“reset”事件。如果传递{silent: true}将不触发“reset”方法。使用不带参数的reset方法可用来情况集合。
+	以下是在Rails环境中，在初始化页面中使用reset填充集合的例子：
+	<script>
+		var Account = new Backbone.Collection;
+		Account.reset(<%= @accounts.to_json %>);
+	</scrpt>
+	不带参数的调用collection.reset()将清空整个集合。
+
+create	collection.create(attributes, [options])
+	可非常便利的在集合中创建一个新的模型实例。相当于用一组属性实例化一个模型，保存模型到服务器，并在创建成功后将模型加入到集合中来。成功后将返回这个模型，如果验证失败将不会创建模型，并返回false。使用它，你需要为集合设置模型属性。create方法接受一组属性列表作为参数，或者一个已存在但未保存的模型对象。
+	创建一个模型，将会立刻触发集合的“add”事件，一旦在服务器端创建模型成功，将触发“sync”事件。如果你希望在向集合添加模型前，等待服务器端返回，传递{wait: true}。
+	var Library = Backbone.Collection.extend({
+		model: Book
+	});
+	var NYPL \ new Library;
+	var othello = NYPL.create({
+		title: Othello",
+		author: "William Shakespeare"
+	});
+
+
+
+Bacbone.Router
+	web应用通常在app中为重要地址提供可链接的、可加入书签的、可分享的URL。直到最近，hash片段（#page）被用于提供该永久链接，由于History API的到来，现在讲不可能使用标准URL（/page）。Backbone.Router为路由客户端页面，并将它们和操作、事件联系提供一组方法。对于还不支持History API的浏览器，Router为URL片段提供优雅的回调函数和透明转换。
+	在页面加载期间，在应用创建路由完成时候，确保调用Backbone.history.start()，或者Backbone.history.start({pushState: true})来路由初始URL。
+
+extend	Backbone.Router.extend(properties, [classProperties])
+	开始创建自定义路由类。定义当特定RUL片段匹配时要触发的操作，并为路由到操作提供routes散列表。注意在路由定义时避免使用反斜杠
+	var Workspace = Backbone.Router.extend({
+		routes: {
+			"help":					"help",		//#help
+			"search/:query"			"search",	//#search/kiwis
+			"search/:query/p:page": "search"	//#search/kiwis/p7
+		},
+		help: function(){
+			...
+		},
+		search: function(query, page){
+			...
+		}
+	});
+
+routes router.routes
+	routes为router中带参数的URL和方法提供映射，与View中的事件散列相似。Routes可以包含param部分:param，它将和'/'中间的URL元素匹配；和splat部分*splat，可以和任意数量的URL元素匹配。
+	例如，形如"search/:query/p:page"的route，可以和#search/obama/p2匹配，将传递"obama"和"2"给action。形如"file/*path"的route可以和#file/nested/folder/file.txt匹配，传递"nested/folder/file.txt"给action。
+	当访问者按了回退键，获取键入一个url，且匹配了特定的route，action的名字将作为一个事件被触发，这样，其它对象可以监听router，并被通知到。在下例中，访问#help/uploading将会触发router中的route:help事件
+	routes: {
+		"help/:page":			"help",
+		"download/*path":		"download",
+		"folder/:name":			"openFolder",
+		"folder/:name-:mode":	"openFolder"
+	}
+	router.on("route:help", function(page){
+		...
+	});
+
+constructor / initialize	new Router([options])
+	当创建了一个新router时，你可以在optioins中直接传递它的routes。所有options将会传递到initialize方法中，如果定义了的话。
+
+route	router.toute(route, name, [callback])
+	为router手动创建route。route参数可以是一个routing字符串，或者一个正则表达式。和route或者正则表达式匹配的部分将会作为参数传回到回调函数中。只要route匹配上了，name参数将触发一个"route:name"事件。如果省略了callback参数，默认将会使用router[name]。
+	initialize: function(options){
+		this.route("page/:number", "page", function(number){...});
+		this.route(/^(.*?)\/open$/, "oprn");
+	},
+	open: function(){...}
+
+navigete	router.navigate(fragment, [options])
+	当你从应用中获取到一个点，希望把它存为一个url时，调用navigate来升级url。如果你还希望调用route方法，设置trigger参数为true。升级url而不在浏览器历史记录中增加一个入口，设置replace为true。
+	openPage: function(pageNumber){
+		this.document.pages.at(pageNumber).oprn();
+		this.navigate("page/" + pageNumber);
+	}
+	# or
+	app.navigate("help/troubleshooting", {trigger: true});
+	# or
+	app.navigate("help/troubleshooting", {trigger: true, replace: true});
