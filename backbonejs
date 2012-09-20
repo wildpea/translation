@@ -545,3 +545,11 @@ navigete	router.navigate(fragment, [options])
 	app.navigate("help/troubleshooting", {trigger: true});
 	# or
 	app.navigate("help/troubleshooting", {trigger: true, replace: true});
+
+Backbone.history
+	History像一个全局路由（每个框架内），提供服务处理hashchange事件或pushState事件，匹配合适的路由，并触发回调函数。你不需要自己创建history——如果你使用有routes的Routers，会自动为你创建一个Backbone.history，你直接使用它的引用。
+	pushState支持存在于纯可选的基础Backbone中。不支持pushState的老式浏览器中将使用基于hash的URL片段，而支持pushState的浏览器中，访问hash URL，将自动升级转换为真实的URL。注意到使用真实URL，需要你的web服务器可以正确的加载这些页面，还需要后端变化。例如，你有一个route是/documents/100，如果浏览器正确导航到该URL地址，web服务器必须能提供这个页面。为了满足搜索引擎网络爬虫，最好能有服务器端生成完整的html页面...但如果是一个网络应用，加载和根路径下一样的内容，其它的由Backbone Views和JavaScript来填充。
+
+start Backbone.history.start([options])
+	当所有Routers都创建好了，所有routes都设置完毕，调用Backbone.history.start()开始监听hashchange时间，并分发路由。
+	为了表明在你的应用中希望使用HTML5的pushState支持，使用Backbone.history.start({pushState: true})
