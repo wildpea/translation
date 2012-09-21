@@ -551,7 +551,16 @@ Backbone.history
 
 start Backbone.history.start([options])
 	当所有Routers都创建好了，所有routes都设置完毕，调用Backbone.history.start()开始监听hashchange时间，并分发路由。
-	为了表明在你的应用中希望使用HTML5的pushState支持，使用Backbone.history.start({pushState: true})
+	为了表明在你的应用中希望使用HTML5的pushState支持，使用Backbone.history.start({pushState: true})。
+	如果你的应用不被域的根url/所支持，告诉你的History，root在哪儿，可以作为一个选项：Backbone.history.start({pushState: true, root: "/public/search"})。
+	调用的时候，如果当前URL和一个route匹配，Backbone.history.start()将返回true。否则返回false。
+	如果服务器已经加载了整个页面，而你不希望在开始History的时候不触发初始化route，传递silent: true
+	由于基于hash的history，在IE中依赖于<iframe>，确保只有在DOM已经准备好了之后再调用start()
+	$(function(){
+		new WorkspaceRouter();
+		new HelpPaneRouter();
+		Backbone.history.start({pushState: true});
+	});
 
 
 
@@ -575,3 +584,132 @@ Backbone.sync
 		render :json => account
 	end
 	集成到Rails的另一个提示：设置ActiveRecord::Base.include_root_in_json = false，关闭默认命名空间下的to_json方法。
+
+emulateHTTP	Backbone.emulateHTTP = true
+	如果你在不支持Backbone的默认REST/http调用的老师web服务器上工作，你需要开启Backbone.emulateHTTP。设置了该选项，将用HTTP post请求伪造PUT和DELETE请求，用该方法设置X-HTTP-Method-Override头部。如果还打开了emulateJSON，该方法将传递一个附加的_method参数。
+	Backbone.emulateHTTP = true;
+	model.save();	//用"_method=PUT" + header，post到"/collection/id"
+
+
+
+Backbone.View
+	Backbone视图比计划的更便利——他们不会替你的HTML和CSS决定任何事情，可以和任何JavaScript模板类搭配使用。主要思想是整合界面和逻辑视图，后面是模型，所有这些可以在模型发生改变时自动升级，而不需要重绘页面。不需要再生成JSON对象，查找DOM中的元素，再手动升级HTML，你可以将视图中的render方法和模型中的change事件绑定——现在，UI中所有显示模型数据的地方，都将立即自动更新。
+
+extend	Backbone.View.extend(properties, [classProperties])
+	通过创建一个自定义视图类使用视图。你需要重载render方法来定义事件，和视图的最主要的tagName，className和id这样的视图元素。
+	var DocumentRow = Backbone.View.extend({
+		tagName: "li",
+		className: "document-row",
+		events: {
+			"click .icon": "open",
+			"click .button.edit":	"openEditDialog",
+			"click .button.delete": "destroy"
+		},
+		render: function(){
+			...
+		}
+	});
+
+constructor/initialize	new View([options])
+	定义一个新视图时，传递的options参数将会附加到view中作为this.options，供将来引用。而有一些特殊的options，如果传递了，将会直接附加到view中：model，collection，el，id，className，tagName以及attributes。如果视图定义了一个initialize方法，在视图第一次创建的时候将会调用。如果你希望创建一个DOM中已经存在的元素的视图引用，传递该元素作为参数：new View({el: existingElement})
+	var doc = Documents.first();
+	new DocumentRow({
+		model: doc,
+		id: "document -row-" + doc.id
+	});
+
+el	view.el
+	任何时候所有视图都有一个DOM元素（el属性），不管该视图是否已经插入到页面中去。这样，视图可以在任何时候加载，而只需插入DOM中一次，这样可以尽量减少reflows和repaints而获得搞高性能的UI渲染。如果定义了视图的tagName，className，id，将直接生成this.el。否则，el将是一个空div。
+	var ItemView = Backbone.View.extend({
+		tagName: 'li'
+	});
+	var BodyView = Backbone.View.extend({
+		el: 'body'
+	});
+	var item = new ItemView();
+	var body = new BodyView();
+	alert(item.el + ' ' + body.el);
+
+$el	view.$el
+	视图元素的缓存jQuery（或者Zepto）对象。不需要总是获取DOM元素的便利的引用。
+	view.$el.show();
+	listView.$el.append(itemView.el);
+
+setElement	view.setElement(element)
+	如果你希望将Backbone视图应用到不同的DOM元素中，使用setElement，它将会创建一个$el引用，并将事件从老元素绑定到新的元素上去。
+
+attributes	view.attributes
+	一组hash属性，将会设置为视图el中的DOM元素属性（id，class，data-ptoperties等等），或者一个发挥同样hash的函数。
+
+$(jQuery or Zepto)	view.$(selector)
+	如果页面中包含了jQuery或者Zepto，每一个视图都将包含一个$方法，用来查询视图元素。如果你使用的jQeruy，使用模型id来查询列表中的元素就不是必须的了，你可以更多的使用HTML类属性，这和view.$el.find(selector)是一样的。
+	ui.Chapter = Backbone.View.extend({
+		serialize: function(){
+			return {
+				title: this.$(".title").text(),
+				start: this.$(".start-page").text(),
+				end:   this.$(".end-page").text()
+			};
+		}
+	});
+
+render	view.render()
+	默认的render实现是无参的。在你的代码中重载该方法，来使用模型数据渲染视图模板，并用新的HTML更新this.el。较好的习惯是在render的最后return this，支持链式调用。
+	var Bookmark = Backbone.View.extend({
+		render: funciton(){
+			$(this.el).html(this.template(this.model.toJSON()));
+			return this;
+		}
+	});
+	Backbone依赖于先前关于HTML模板的实现。render方法甚至可以补全HTML字符串，或者使用document.createElement来生成DOM树。然而，我们建议采用一个好的JavaScript模板类：Mustach.js，Haml-js，Eco都是很好的选择。由于页面中包括了Underscore.js，_.template可以使用，如果你已经有了防XSS攻击的数据，这也是一个不错的选择。
+	不论你最终采用了那种模板策略，从来不在JavaScript中设置HTML代码都是非常好的。在DocumentCloud中，我们使用Jammit，来打包JavaScript模板，并作为core.js包的一部分保存在/app/views中
+
+remove	view.remove()
+	从DOM中移除视图的便利方法。等同于调用$(view.el).remove();
+
+make	view.make(tagName, [attributes], [content])
+	使用可选属性和HTML内容，创建一个给定类型（tagName）的DOM元素的便利方法。通常在外部初始化view.el
+	var view = new Backbone.View;
+	var el = view.make("b", {"class": "bold"}, "Bold!");
+	$("#make-demo").append(el);
+
+delegateEvents	delegateEvents([events])
+	使用jQuery的delegate方法，为有一个视图的DOM事件提供回调。如果events哈希没有被正确的传递，使用this.events。事件以{"event selector": "callback"}的方式书写。回调函数可以是视图中的一个函数名，或者直接是一个函数体。如果省略了selector，事件将直接绑定到视图的根元素this.el上。默认情况下，delegateEvets将在视图的构造函数中调用，所以如果你有一个简单的events散列表，所有的DOM时间将建立连接，你不需要再自己调用函数。
+	events属性同样可以是一个返回events散列表的函数，将使编程更容易，同样继承至父视图。
+	使用delegateEvents，在渲染期间，相对于手动使用jQuery为子元素绑定事件，提供了更多的便利。在交给jQuery前，所有回调函数都与视图绑定，当回调函数调用时，this继续指向view对象。当delegateEvents再次执行的时候，可能是不同的events散列表，所有的回调函数将移除，并重新触发——对于在不同模型中有不同显示的视图而言非常有用。
+	在搜索结果中显示的视图可能看起来是这样的：
+	var DocumentView = Backbone.View.extend({
+		events: {
+			"dbclick"			: "oepn",
+			"click .econ.doc"	: "select",
+			"contextmenu .icon.doc"	: "showMenu",
+			"click .show_notes"	: "toggleNotes",
+			"click .title .lock": "edietAccesslevel",
+			"nouseover .title .date"	: "showTooltip"
+		},
+		render: function(){
+			$(this.el).html(this.template(this.model.toJSON()));
+			return this;
+		},
+		open: function(){
+			window.open(this.model.get("viewer_url"));
+		},
+		select: function(){
+			this.model.set({select: true});
+		},
+		...
+	});
+
+undelegateEvents	undelegateEvents()
+	移除视图中所有委托的事件。当你希望使临时DOM中的视图无效，或者移除它时，这很有用。
+
+
+
+Utility Functions
+noConflict	var backbone = Backbone.noConflict();
+	将Backbone对象设置为原始的值。你可以使用Backbone.noConflict()的返回的值，保存一份对Backbone的本地引用。在讲Backbone植入第三方网站，而你不希望覆盖已有的Backbone时，这很有用。
+	var localbackbone = Backbone.noConflict();
+	var model = localBackbone.Model.extend(...);
+
+setDomLibrary	Backbone.setDomLibrary(jQueryNew);
+	如果你在页面中有jQuery的多份拷贝，或者仅仅是告诉Backbone使用一个特定对象作为它的DOM/Ajax库，该函数很有用。
