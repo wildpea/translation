@@ -1,0 +1,715 @@
+﻿backbone.js
+
+	Backbone.js，是一个web应用架构，它提供支持key-value绑定和自定义事件到模型（modesl）、有着可枚举的丰富API函数的集合（collections）、定义事件绑定的视图（views），并通过REST风格的JSON接口连接你已有的API。
+	本项目托管在GitHub上，包括带注释的源代码，在线调试，应用案例，指南列表，和一个使用了backbone的真实项目的长列表。Backbone在MIT软件许可下使用。
+	你可以在GitHub页面上、Freenode IRC的#document标签下、在Google Group中报告、在wiki中增加页面，或给@documnetcloud发tweets，来报告bug以及讨论特性。
+	Backbone是Documentloud的一个开源组件。
+		
+	下载&依赖(右击，选择“保存为”)
+	Backbone仅重度依赖于Underscore.js(>1.3.1)。要使用RESTful、历史支持，需要用到Backbone.Router，DOM操作需要Backbone.View，包括json2.js，和jQuery(>1.4.2)或者Zepto。
+
+简介
+	在构建需要大量使用JavaScript的web应用时，你需要注意的头等大事是停止把数据绑定到DOM上。经常会导致使用大量jQuery选择器和回调函数，使得程序看起来一团糟，并在HTML UI、你到Javascript逻辑和服务器数据库之间保存保持同步而发疯。对于客户端富应用而言，一个更结构化到解决方案通常很有帮助。
+	使用Backbone，你把数据存在Models中，它可以被创建、验证、销毁、把数据保存到服务器端。当UI交互导致Models中到属性发生变化时，模型触发一个"change"事件；所有显示模型状态的Views都可以监听到这一事件，并能据此作出反应，用新数据重新渲染。在一个完整的Backbone app中，你不需要写胶合代码查看DOM，并通过id来查找元素，并手工更新HTML——当模型发生变化时，视图会自己更新自己。
+	(如果你是新手，并且不是确切的知道Backbone到底是做什么的，可以从 基于Backbone做的项目列表 开始。
+	下面的大部分代码都是可以运行的，单击play按钮来执行它们。
+
+升级到0.9
+	Backbone 0.9版被认为是即将发布的1.0版的候选者。一些API发生了改变，这儿有一份修改日志，一些新特性占优势，有几点改变你需要注意：
+	·如果你曾在Backbone View中手动设置过this.el作为一个特定的DOM元素，你可以用setElement替代。
+	·生成和销毁模型现在是乐观的（------------）。如果你需要让前面的等待服务器回应的行为知道成功，可以传{wait:true}。你也可以通过传{wait:true}来保存调用。
+	·如果你曾写过相当数量的$(view.el)，现在为该jQuery对象提供缓存引用：$el
+	·如果你升级，请保证Underscore.js已经至少升级到1.3.1
+	·传参数{slilent:true}之后，将数据置为初始值，model.set将不触发change事件。同样的，属性安静的改变后，change:attribute事件将在下个change事件发生时调用。
+	·介于vie.$(selector)现在等同于view.$el.find(selector)，而不是$(selector, view.el)，它将不再支持HTML字符串或者DOM元素作为selector参数。
+
+Backbone Events
+	Events是一个模块，可被嵌入任何对象中，为对象提供绑定自定义事件的能力。Eents不需要在使用前定义，可以传递参数。例：
+	var object = {};
+	_.extend(object, Backbone.Events);
+	object.on("alert", function(msg){
+		alert("Triggered" + msg);
+	});
+	object.trigger("alert", "an event");
+	例如，这样可以为你的应用的不同部分提供便利的事件分发：var dispatcher = _.clone(Backbone.Events);
+
+on	object.on(event, callback, [context])	Alias:bind
+	绑定一个callback至一个对象。只要event被触发，将执行callback函数。如果你在一个页面有大量不同的事件，惯例是用冒号分割来命名："poll:start"，或者"change:selection"。还可以通过空格隔开，同时绑定多个事件：
+	book.on("change:title change:author");
+	要给this变量提供上下文环境context，通过给第三个可选参数：model.on("change", this.render, this)
+	任何事件发生的时候，绑定的特殊的"all"事件都将会被触发，这时，触发的事件名称为第一个参数。例如，从一个对象中触发所有事件到另一个对象中去：
+	proxy.on("all", function(eventName){
+		object.trigger(eventName);
+	});	
+
+off	object.off([event], [callback], [context])  Alias: unbind
+	从对象中移除先前绑定的callback函数。如果没有指定context，当前回调函数将在所有上下文中被移除。如果没有指定回调函数，当前event的所有回调函数将会被移除。如果没有指定events，改对象的所有events的回调函数将会被移除。
+	//仅仅移除"onChange"回调函数
+	object.off("change", onChange);
+	//移除所有"change"回调函数
+	object.off("change");
+	//移除所有events的"onChange"回调函数
+	object.off(null, onChange);
+	//移除"context"下所有events的所有回调函数
+	object.off(null, null, context);
+	//移除object的所有回调函数
+	object.off();
+
+trigger	object.trigger(event, [*args])
+	触发指定event的所有回调函数，或者由空格分隔的多项event。第二项参数将会传递给回调函数。
+	
+	
+	
+Backbone.Model
+	Models是任何Javascript应用的核心，它包括交互数据，以及相应的大量逻辑：转换、验证、计算属性，以及访问控制。你在你自己的特定域中扩展Backbone.Model，Model将会为你提供一系列基础函数来管理变化。
+	下面是一个虚构的例子，但它展示了定义model，包括：自定义函数、设定属性值、触发绑定在某个属性上的事件。在这段代码执行一次后，你的浏览器控制台中将可以获取到sidebar这个对象，你可以尝试一下。
+	var Sidebar = Backbone.Model.extend({
+		promptColor: function(){
+			var cssColor = promp("Please enter a CSS color:");
+			this.set({color: cssColor});
+		}
+	});
+	window.sidebar = new Sidebar;
+	sidebar.on("change:color", function(model, color){
+		$("#sidebar").css({background: color});
+	});
+	sidebar.set({color: "white"});
+	sidebar.prompColor();
+	
+Extend	Backbone.Model.extend(properties, [classProperties])
+	要创建你自己的Model类，你只需要扩展Backbone.Model，提供实例属性，或者直接通过构造函数添加可选的类属性。
+	extend将正确的设置原型链，所以由extend创建的子类随你喜欢的无限扩展。
+	var Note = Backbone.Model.extend({
+		initialize: function(){...}
+		author: function(){...}
+		coordinate: function(){...}
+		allowedToEdit: function(account){
+			return true;
+		}
+	});
+	*var PrivateNote = Note.extend({
+		allowedToEdit: function(account){
+			return account.owns(this);
+		}
+	});
+	关于super的简要提示：JavaScript没有提供一个简单的调用父类的途径——与之同名的函数在原型链的顶端定义的。如果你重载了类似set，或者save的核心函数，而你想要调用父类的函数，你必须显示调用，如下：
+	var Note = Backbone.Model.extend({
+		set: function(attributes, options){
+			Backbone.Model.protoype.set.call(this, attributes, options);
+			...
+		}
+	});
+	
+constructor/initialize	new Model([attributes])
+	实例化一个模型的时候，你可以通过attributes传递初始值，它将会被set到模型中。如果你定义了一个initialize方法，在生成模型的时候将会调用这个方法。
+	new Book({
+		title: "One Thousand and One Nights",
+		author: "Scheheazade"
+	});
+	在少数情况下，如果你想尝试一下其它方法，你可以重载constructor方法，将会替换掉模型的实际的constructor方法。
+	
+get	mode.get(attribute)
+	获取到模型属性的当前值。例如：note.get("title")。
+	
+set model.set(attributes, [options])
+	设置模型的哈希属性（一个或多个）。如果任何属性改变了模型的状态，将会触发"change"事件，除非option中传递了一个{silent: true}。同样可以触发特定属性的change事件，你可以绑定它们：change:title，或者change:content。你同样可以单独传递键值：
+	note.set({title:"March 10", content: "In his eyes she eclipses..."});
+	book.set("title", "A Scandal in Bohemia");
+	如果模型有一个validate方法，将会在属性设置之前验证属性，如果验证未通过，则不会改变，set方法将会返回false。否则，set方法会返回模型的引用。你同样可以在options中传递error回调函数，它将在验证失败触发"error"方法时被调用。如果传递了{silent:true}，则验证将延迟到下一次改变。
+	
+escape	model.escape(attribute)
+	与set方法像似，但返回的的是模型属性的HTML-escaped版本。如果把模型中的属性插入到HTML中，使用escape方法将会避免XSS攻击
+	var hackr = new Backbone.Model({
+		name: "<script>alert('xss')</script>"
+	});
+	alert(hacker.escape('name'));
+	
+has	model.has(attribute)
+	如果属性非null或者非undefined，将会返回true
+	if (note.has("title")){
+		...
+	}
+	
+unset	model.unset(attribute, [options])
+	从内部属性列表中通过删除，来移除一个属性。如果options中没有传递silent，将会触发"change"事件。
+	
+clear	model.clear([optioins])
+	移除模型中的所有属性。如果options中没有传递silent，将会触发"change"事件。
+	
+id	model.id
+	模型中的特殊属性，id可以是任意字符串(整数或者UUID)。如果你在属性列表中设置了id值，它将会拷贝一份作为模型的直接属性。collection中可以通过id来获取models，默认情况下，id被用来生成模型的URL。
+
+idAttribute	model.idAttribute
+	模型的唯一标识保存在id属性下。如果你直接与使用不同key的后端数据库（CouchDB，MongoDB）通信，你可能需要建立一个id到模型idAttribute的映射：
+	var Meal = Backbone.Model.extend({
+		idAttribute: "_id"
+	});
+
+cid	model.cid
+	模型的一个特殊属性，cid或者client id是在模型第一次创建的时候自动生成的唯一标识。Client id使用非常便利，在模型还没有存储到后端还没有得到最终id，但需要在UI中显示的时候。Client id格式如下：c1, c2, c3...
+
+attribute	model.attributes
+	attributes属性包含了模型状态的内部列表。请用set方法来设置属性，而不是直接改变它。如果你需要获取到一份模型的属性，请使用toJSON方法。
+
+changed	model.changed
+	changes属性包含了最后一次触发"change"事件后所有属性的变化。请不要直接修改changed。它的状态由set和change方法维护。可以通过changedAttributes获取到changed的一份拷贝
+
+defaults	model.defaults or model.defaults()
+	defaults列表（或者方法）可以用来定义模型的默认值。创建模型实例的时候，任何一个未指定的属性都将被设置为默认值。
+	var Meal = Backbone.Model.extend({
+		defaults: {
+			"appetizer": "caesar salad",
+			"entree": "ravioli",
+			"dessert": "cheesecake"
+		}
+	});
+	alert("Dessert will be " + (new Meal).get('dessert'));
+	提示：注意，JavaScript中，对象的传递是引用传递，所以，如果你在默认值中包含了一个对象，它将在所有实例中被共享。
+
+toJson	model.toJSON()
+	返回模型属性的JSON格式字符串。这可以用来持久化、序列化，或者在传给view之前增强。该方法的名字具有一定迷惑性，它并不返回JSON格式的字符串——恐怕这是JavaScript API中JSON.stringify所要做的事情。
+	var artist = new Backbone.Model({
+		firstName: "Wassily",
+		lastName: "Kandinsky"
+	});
+	artist.set({birthday: "December 16, 1866"});
+	alert(JSON.stringify(artist));
+
+fetch model.fetch([options])
+	通过调用Backbone.sync来重置模型的状态跟服务器保持一致。返回一个jqXHR。这在模型没有增加数据，或者你希望与最新的后台服务器中数据保持一致时，这非常有用。当服务器数据跟当前属性不一致时，将会触发"change"事件。option列表中接受success和error回调函数，回调函数以(model, response)作为参数。
+	//channel模型每10秒从后台更新一次数据
+	setInterval(function(){
+		channel.fetch();
+	}, 1000);
+	
+save	model.save([attributes], [options])
+	保持模型到数据库（或者改变持久层），通过调用Backbone.sync。如果验证成功，返回jqXHR，否则返回false。attributes列表（和在set中一样）需要包含你希望更新的属性——keys不在其中的不会被改变——但是，资源的全部属性将会被传到后台。与set一样，你也可以不传递对象，而传递单独的key和value。如果模型有validate方法，而validate方法返回false，模型将不会被保持。如果模型isNew，save将会是一个"create"（HTTP POST），如果后台模型已经存在，save将会是一个"updata"（HTTP PUT）。
+	在新属性上调用save方法，将会立即触发"change"事件，当服务器知道改变成功之后，触发"sync"事件。如果你希望在模型属性设置成功前等待服务器，可以传递{wait:true}。
+	在接下来的例子中，注意到模型第一次save时，我们重载版本的Backbone.sync方法是怎样接收"create"方法，并在第二次调用时，是怎样接收"updata"方法的。
+	Backbone.sync = function(method, model){
+		alert(method + ": " + JSON.stringigy(model));
+		model.id = 1;
+	}
+	var book = new Backbone.Model({
+		title: "The Rough Riders",
+		author: "Theodore Roosevelt"
+	});
+	book.save();
+	book.save({author: "Teddy"});
+	save方法接收options列表中success方法和error方法，其中参数为(model, response)。如果model有一个validate方法，且validate方法返回为fail，将会调用error回调函数。如果服务器端验证失败，将会在返回文本格式或者JSON格式的HTTP码-200。
+	book.save("author", "F.D.R.", {error: function(){...}});
+
+destroy	model.destroy([options])
+	通过向Backbone.sync发起HTTP DELETE请求，销毁服务器端的模型。返回一个jqXHR对象，如果模型inNEW，则返回false。options列表接受success和error方法。触发一个“destroy”事件，将会冒泡至任何包含了这个模型的collections中去，当服务器端知道模型销毁成功时，还会触发“sync”事件。如果你希望等待服务器端将模型从collection中销毁，传递{wait:true}
+	book.destroy({success: function(){
+		...
+	}});
+
+validate	model.validate(attributes)
+	该函数未定义，如果你需要在Javascript中使用，鼓励你在自定义的validate逻辑中重载它。validate函数在set和save方法执行之前调用，并从set和save方法中获取属性。如果属性验证通过，validate方法不返回任何值；否则，如果你愿意，将返回错误信息。它可以是简单到显示一个字符串格式的错误提示，也可以复杂到一个描述语法错误的错误提示对象。如果validate方法返回错误，将不执行set和save方法，而模型属性也不会被改变。验证失败，将触发“error”事件。
+	var Charpter = Backbone.Model.extend({
+		validate: function(attrs) {
+			if (attrs.end < attrs.start) {
+				return "can't end before it starts";
+			)}
+		}
+	});
+	var one = new Chapter({
+		title: "Chapter One: The Beginning"
+	});
+	one.on("error", function(model, error){
+		alert(model.get("title") + " " + error);
+	});
+	one.set({
+		start: 15,
+		end: 10
+	});
+	在模型层和集合层提供粗粒度错误信息，“error”事件非常有用，但如果要在某一视图中更好的处理错误，你可能需要直接定义一个error回调函数来重载和覆盖它
+	account.set({access: "unlimited"}, {
+		error: function(){
+			alert(error);
+		}
+	});
+
+isValie	model.isValid()
+	如果你静默改变模型数据，模型可能出于无效状态。如果在输入的时候处理将很有用。根据你的validate方法，调用model.isValid()方法来检查当前模型是否处于有效状态。
+
+url	model.url()
+	返回可能存在在服务器上的模型资源的相对路径。如果你的模型存在其它地方，用正确的逻辑来重载这个方法。生成如下格式的URL："/[collection.url][id]"，如果模型不是集合的一部分，将返回"/[urlRoot]/id"。
+	由于要使用到Collection#url来生成URL，确保你定义过它。如果所有模型公用一个公共的URL，也可以使用urlRoot属性。id为101的模型，存储在Backbone.Collection中的url为"/documents/7/nots"，其URL为："/documents/7/notes/101"
+
+urlRoot	model.urlRoot or model.urlRoot()
+	如果你在集合外使用模型，通过定义urlRoot，可以获取到基于模型id的默认url方法。"/[urlRoot]/id"注意到urlRoot同样可以定义为一个方法
+	var Book = Backbone.Model.extend({urlRoot: '/books'});
+	var solaris = new Book({id: "1083-lem-solaris"});
+	alert(solaris.url());
+
+parse	model.parse(response)
+	只要从服务器端返回了模型，如fetch和save方法，就会调用parse方法。该方法传递一个response对象，并返回应该set到模型中的参数列表。默认情况下执行一个空操作，传递JSON响应。如果你要调用已存在的API，或者为将响应放在命名空间中，你可以重载它。
+	如果你的后台是Rails，你可能会注意到Rails默认的to_json实现包含命名空间下的模型。为了无缝整合Backbone使该特性无效：
+	ActiveRecord::Base.include_root_in_json = false
+
+clone	model.clone()
+	返回具有相同属性的新的模型实例。
+
+isNew	model.isNew()
+	该模型已经保存到服务器端了吗？如果模型没有id属性，它将被视为是新的。
+
+change	model.change()
+	手动触发“change”事件，和每一个改变了的属性的“change:attribute”事件。如果你在set方法中传递了{silent: true}，为了快速整合模型，你需要在完成的时候调用model.change()方法。
+
+hasChanged	model.hasChanged([attribute])
+	上一次“change”事件以来，模型被改变了吗？如果传递了attribute参数，如果该属性被改变了时，将会返回true。
+	注意到该方法和以下与change有关的方法，仅在“change”事件周期内有效。
+	book.on("change", function(){
+		if (book.hasChanged("title")){
+			...
+		}
+	});
+
+changeAttributes	model.changedAttributes([attributes])
+	检索模型中被改变的属性列表。或者，可以传入一个外部attributes，返回外部属性列表中与模型中布同的属性。这可用于指出视图中哪一部分需要更新，或者与服务器端同步需要哪些操作。
+
+previous	model.previous(attribute)
+	在“change”事件中，该方法可用于获取属性改变前的值
+	var bill = new Backbone.Model({
+		name: "Bill Smith"
+	});
+	bill.on("change:name", fucntion(model, name){
+		alert("Changed name from " + bill.previous("name") + " to " + name)
+	});
+	bill.set({name: "Bill Jones"});
+
+previousAttributes	model.previousAttributes()
+	返回模型先前属性的一份拷贝。在比较模型不同版本时，和在产生错误而要返回到上一个正确状态时很有用
+
+
+
+
+Backbone.Collection
+	Collections是模型的有序集合。你可以绑定一个“change”事件来获知集合中的模型被改变了，监听“add”和“remove”事件，从服务器端fetch集合，并使用Underscore.js中的一系列有用的方法。
+	为了方便，任何在集合中触发模型的事件，都将直接在集合中触发。这允许你在集合中监听任意模型的某属性，例如：Documents.on("change:selected", ...)
+
+extend	Backbone.Collection.extend(properties, [classProperties])
+	通过扩展Backbone.Collection来创建你自己的Collection类，提供properties的实例，同样还有可选的classProperties将直接扩展到集合的构造函数方法中。
+
+model	collection.model
+	重载该方法来定义集合中的模型类。如果定义了该函数，你可以给add、create、reset方法传一组属性数组，属性将会自动转换为相应的模型。
+	var Library = Backbone.Collection.extend({
+		model: Boook
+	});
+
+constructor/initialize	new Collection([model], [options])
+	创建集合时，你可以传递初始化的model数组。接受集合comarator方法作为option的一项。如果你定义了initialize方法，将在集合创建好之后调用。
+	var tabs = new TabSet([tab1, tab2, tab3]);
+
+models	collection.models
+	获取到集合中的JavaScript数组类型的模型。通常清空下，使用get, at, 或者Underscore中定义的方法来获取模型对象，但偶尔也需要直接获取到模型
+
+toJSON	collection.toJSON()
+	返回集合中每一个模型的属性列表。这可用于将集合作为一个整体序列化或者持久化。该方法的名字可能具有一定的迷惑性，由于涉及到JavaScript的JSON API.
+	var collection = new Backbone.Collection([
+		{name: "Tim", age: 5},
+		{name: "Ida", age: 26},
+		{name: "Rob", age: 55}
+	]);
+	alert(JSON.stringify(collection));
+
+
+Underscore Methods
+	Backbone在Backbone.Collection中使用Underscore.js中提供28个迭代函数。他们并未全部列举在下，查看细节，可查看Underscore文档
+	forEach	(each) 
+	map
+	reduce(foldl, inject)
+	reduceRight(foldr)
+	find(detect)
+	filter(select)
+	reject
+	every(all)
+	some(any)
+	include
+	invoke
+	max
+	min
+	sortBy
+	groupBy
+	sortedIndex
+	shuffle
+	toArray
+	size
+	first
+	initial
+	reset
+	last
+	without
+	lastIndexOf
+	isEmpty
+	chain
+	Books.each(function(book){
+		book.publish();
+	});
+	var titles = Books.map(function(book){
+		return book.get("title");
+	});
+	var publishedBooks = Books.fiter(function(book){
+		return book.get("publish") === true;
+	});
+	var alphabetical = Books.sortBy(function(book){
+		return book.author.get("name").toowerCase();
+	});
+
+add collection.add(model, [options])
+	向集合中增加一个（或一组）模型。将触发“add”事件，你可以通过传递{silent:true}来避免。如果模型属性已经定义，你还可以传递属性对象，用来实例化模型。传递{at:index}在集合的index处拼接模型。同样，如果你在集合的“add”事件中定义了回调函数，options.index将指定在集合的哪个位置增加模型。
+	var ships = new Backbone.Collection;
+	ships.on("add", function(){
+		alert("Ahoy" + ship.get("name") + "!");
+	});
+	shipes.add([
+		{name: "Flying Dutchman"},
+		{name: "Black Pearl"}
+	]);
+
+remove collection.remove(models, [options])
+	从集合中删除一个（或一组）模型。将触发“remove”事件，你可以通过传递silent来避免。如果为“remove”事件绑定了回调函数，可以通过optioins.index指定集合中的哪个模型将被移除。
+
+get	collection.get(id)
+	根据id，获取集合中的一个模型。
+	var book = Library.get(110);
+
+getByCid	collection.getByCid(cid)
+	根据client id获取集合中的一个模型。client id是模型的.cid属性，在模型创建的时候自动分配的。在模型还没有被保存到服务器端，而没有获得真正的id时，这很有用。
+
+at collection.at(index)
+	根据索引，从集合中获得一个模型。在模型排好序时这很有用。如果集合中的模型没有排好序，at将返回模型插入集合的顺序。
+
+push	collection.push(model, [options])
+	向集合的末尾添加一个模型。options同add方法。
+
+pop	collection.pop([options])
+	删除并返回集合末尾的模型。options同add方法。
+
+unshift	collection.unshift(model, [option])
+	向集合的头部添加一个模型。options同add方法。
+
+shift	collection.shift([options])
+	删除并返回集合头部的模型。options和add方法一样。
+
+length	collection.length
+	向一个数组一样，集合维护一个length属性，计算集合中包含的模型数。
+
+comparator	collection.comparator
+	默认情况下，集合没有comparator方法。如果你定义了一个comparator，它将用于保持集合是已序的。这意味着，模型添加到集合中时，将已正确的排序添加到collection.models中去。comparator方法可被定义成一个sortBy（参数为只有一个参数的函数），或者一个sort（参数为两个参数的比较函数）。
+	“sortBy”比较方法，传入一个模型，返回一个数字或者字符串，通过该值表面该模型与其他模型的顺序。“sort”方法接收两个模型，如果第一个模型应该排在第二个的前面返回-1，如果两个模型顺序相等返回0，如果第一个排在第二个后面返回1.
+	注意到接下来的例子中，无论章节以什么样的顺序加入进来，都将以正确的顺序输出。
+	var Chapter = Backbone.Model;
+	var chapters = new Backbone.Collection;
+	chapters.comparator = function(cahpter){
+		return chapter.get("page");
+	}
+	chapters.add(new Chapter({page: 9, title: "The End"}));
+	chapters.add(new Chapter({page: 5, title: "The Middle"}));
+	chapters.add(new Chapter({page: 1, title: "The Beginning"}));
+	alert(chapters.pluck("title"));
+	有比较方法的集合不会自动为以前添加的模型属性排序，你需要在改变了可能影响到模型顺序的属性后，调用sort方法。
+
+sort	collection.sort([options])
+	强制冲排序一个集合。通常情况下，拥有comparator方法的集合会自动维护顺序，而不需要你调用该方法。除非传递{silent: true},sort方法将会触发集合的“reset”事件。
+
+pluck	collection.pluck(attribute)
+	从集合中的所有模型中获取一个属性。和调用map方法一样，从iterator中返回一个属性。
+	var stooges = new Backbone.Collection([
+		{name: "Curly"},
+		{name: "Larry"},
+		{name: "Moe"}
+	]);
+	var names = stooges.pluck("name");
+	alert(JSON.stringify(names));
+
+where	collection.where(attributes)
+	返回集合中符合attributes条件的模型。适用于单一条件的filter。
+	var friends = new Bacbone.Collection([
+		{name: "Athos", job: "Musketeer"},
+		{name: "Porthos", job: "Musketeer"},
+		{name: "Aramis", job: "Musketeer"},
+		{name: "d'Artagnan", job: "Guard"}
+	]);
+	var musketeers = frieds.where({job: "Musketeer"});
+	alert(musketeers.length);
+
+url	collection.url or collection.url()
+	设置集合引用在服务器上的url属性（或函数）。集合中的模型使用url或者自己的URL构造函数
+	var Notes = Backbone.extend({
+		url: '/notes'
+	});
+	var Notes = Backbone.Collection.extend({
+		url: function() {
+			return this.documnet.url() + '/notes';
+		}
+	});
+
+parse	collection.parse(response)
+	任何时候集合中的模型从服务器返回，如fetch，都将调用parse。该方法传递一个response对象，并返回一组即将添加到集合中的模型属性。默认的实现无参数，仅传递JSON返回。如果你需要使用已有的API，或者使用命名管理，你需要重载它。注意到，如果你模型中有了一个parse方法，将会在每次获取模型时调用。
+	var Tweets = Backbone.Collection.extend({
+		parse: function(response){
+			return response.results;
+		}
+	});
+
+fetch	collectioin.fetch([options])
+	从服务器端获取集合中模型的默认设置，并在拿到数据后重置集合。options散列表将传递有(collection, response)参数的success和error方法。当服务器返回模型数据时，集合将被重置。在自定义持久化下将触发Backbone.sync，并返回一个jqXHR。服务器的fetch请求句柄将返回一个JSON格式的一组模型。
+	Backbone.sync = function(method, model){
+		alert(method + ": " + model.url);
+	};
+	var Accounts = new Backbone.Collection;
+	Accounts.url = '/accounts';
+	Accounts.fetch();
+	如果你希望为当前集合增加新模型，而不是替换掉集合内容，option中传递{add: true}。
+	fetch的option中还可以传递jQuery.ajax，这样可以只获取已标记页码的集合中的一页：Documents.fetch({data: {page: 3}})
+	注意到fetch不应该用来在页面下载时填充集合——所有在下载时需要的模型应该已经存在了。fetch主要用于页面不是立即需要模型情况下的延迟加载：例如，文档中一个备注集合，可能被打开或关闭。
+
+reset	collection.reset(models, [options])
+	一次性添加和删除模型总是好的。但有时由于模型太多，你可能更愿意部分更新集合。使用reset，用一组新模型（或者属性列表）更新集合，在最后将触发一个“reset”事件。如果传递{silent: true}将不触发“reset”方法。使用不带参数的reset方法可用来情况集合。
+	以下是在Rails环境中，在初始化页面中使用reset填充集合的例子：
+	<script>
+		var Account = new Backbone.Collection;
+		Account.reset(<%= @accounts.to_json %>);
+	</scrpt>
+	不带参数的调用collection.reset()将清空整个集合。
+
+create	collection.create(attributes, [options])
+	可非常便利的在集合中创建一个新的模型实例。相当于用一组属性实例化一个模型，保存模型到服务器，并在创建成功后将模型加入到集合中来。成功后将返回这个模型，如果验证失败将不会创建模型，并返回false。使用它，你需要为集合设置模型属性。create方法接受一组属性列表作为参数，或者一个已存在但未保存的模型对象。
+	创建一个模型，将会立刻触发集合的“add”事件，一旦在服务器端创建模型成功，将触发“sync”事件。如果你希望在向集合添加模型前，等待服务器端返回，传递{wait: true}。
+	var Library = Backbone.Collection.extend({
+		model: Book
+	});
+	var NYPL \ new Library;
+	var othello = NYPL.create({
+		title: Othello",
+		author: "William Shakespeare"
+	});
+
+
+
+Bacbone.Router
+	web应用通常在app中为重要地址提供可链接的、可加入书签的、可分享的URL。直到最近，hash片段（#page）被用于提供该永久链接，由于History API的到来，现在讲不可能使用标准URL（/page）。Backbone.Router为路由客户端页面，并将它们和操作、事件联系提供一组方法。对于还不支持History API的浏览器，Router为URL片段提供优雅的回调函数和透明转换。
+	在页面加载期间，在应用创建路由完成时候，确保调用Backbone.history.start()，或者Backbone.history.start({pushState: true})来路由初始URL。
+
+extend	Backbone.Router.extend(properties, [classProperties])
+	开始创建自定义路由类。定义当特定RUL片段匹配时要触发的操作，并为路由到操作提供routes散列表。注意在路由定义时避免使用反斜杠
+	var Workspace = Backbone.Router.extend({
+		routes: {
+			"help":					"help",		//#help
+			"search/:query"			"search",	//#search/kiwis
+			"search/:query/p:page": "search"	//#search/kiwis/p7
+		},
+		help: function(){
+			...
+		},
+		search: function(query, page){
+			...
+		}
+	});
+
+routes router.routes
+	routes为router中带参数的URL和方法提供映射，与View中的事件散列相似。Routes可以包含param部分:param，它将和'/'中间的URL元素匹配；和splat部分*splat，可以和任意数量的URL元素匹配。
+	例如，形如"search/:query/p:page"的route，可以和#search/obama/p2匹配，将传递"obama"和"2"给action。形如"file/*path"的route可以和#file/nested/folder/file.txt匹配，传递"nested/folder/file.txt"给action。
+	当访问者按了回退键，获取键入一个url，且匹配了特定的route，action的名字将作为一个事件被触发，这样，其它对象可以监听router，并被通知到。在下例中，访问#help/uploading将会触发router中的route:help事件
+	routes: {
+		"help/:page":			"help",
+		"download/*path":		"download",
+		"folder/:name":			"openFolder",
+		"folder/:name-:mode":	"openFolder"
+	}
+	router.on("route:help", function(page){
+		...
+	});
+
+constructor / initialize	new Router([options])
+	当创建了一个新router时，你可以在optioins中直接传递它的routes。所有options将会传递到initialize方法中，如果定义了的话。
+
+route	router.toute(route, name, [callback])
+	为router手动创建route。route参数可以是一个routing字符串，或者一个正则表达式。和route或者正则表达式匹配的部分将会作为参数传回到回调函数中。只要route匹配上了，name参数将触发一个"route:name"事件。如果省略了callback参数，默认将会使用router[name]。
+	initialize: function(options){
+		this.route("page/:number", "page", function(number){...});
+		this.route(/^(.*?)\/open$/, "oprn"); },
+	open: function(){...}
+
+navigete	router.navigate(fragment, [options])
+	当你从应用中获取到一个点，希望把它存为一个url时，调用navigate来升级url。如果你还希望调用route方法，设置trigger参数为true。升级url而不在浏览器历史记录中增加一个入口，设置replace为true。
+	openPage: function(pageNumber){
+		this.document.pages.at(pageNumber).oprn();
+		this.navigate("page/" + pageNumber);
+	}
+	# or
+	app.navigate("help/troubleshooting", {trigger: true});
+	# or
+	app.navigate("help/troubleshooting", {trigger: true, replace: true});
+
+Backbone.history
+	History像一个全局路由（每个框架内），提供服务处理hashchange事件或pushState事件，匹配合适的路由，并触发回调函数。你不需要自己创建history——如果你使用有routes的Routers，会自动为你创建一个Backbone.history，你直接使用它的引用。
+	pushState支持存在于纯可选的基础Backbone中。不支持pushState的老式浏览器中将使用基于hash的URL片段，而支持pushState的浏览器中，访问hash URL，将自动升级转换为真实的URL。注意到使用真实URL，需要你的web服务器可以正确的加载这些页面，还需要后端变化。例如，你有一个route是/documents/100，如果浏览器正确导航到该URL地址，web服务器必须能提供这个页面。为了满足搜索引擎网络爬虫，最好能有服务器端生成完整的html页面...但如果是一个网络应用，加载和根路径下一样的内容，其它的由Backbone Views和JavaScript来填充。
+
+start Backbone.history.start([options])
+	当所有Routers都创建好了，所有routes都设置完毕，调用Backbone.history.start()开始监听hashchange时间，并分发路由。
+	为了表明在你的应用中希望使用HTML5的pushState支持，使用Backbone.history.start({pushState: true})。
+	如果你的应用不被域的根url/所支持，告诉你的History，root在哪儿，可以作为一个选项：Backbone.history.start({pushState: true, root: "/public/search"})。
+	调用的时候，如果当前URL和一个route匹配，Backbone.history.start()将返回true。否则返回false。
+	如果服务器已经加载了整个页面，而你不希望在开始History的时候不触发初始化route，传递silent: true
+	由于基于hash的history，在IE中依赖于<iframe>，确保只有在DOM已经准备好了之后再调用start()
+	$(function(){
+		new WorkspaceRouter();
+		new HelpPaneRouter();
+		Backbone.history.start({pushState: true});
+	});
+
+
+
+Backbone.sync
+	Backbone.sync，是每次Backbone尝试从服务器端获取或者保存模型时，都会调用的方法。默认，会使用（jQuery/Zepto）.ajax发起rest风格的JSON请求，并返回一个jqXHR。如果你要使用不同的持久化策略，比如WebSorckets，XML传递，或者Local Storage，你可以重载该方法。
+	Backbone.sync方法的签名是sync(method, model, [options])
+	.method——CRUD方法（"create", "read", "update", "delete"）
+	.model——将要保存的模型（或者要都取的集合）
+	.options——sucess和error回调函数，以及其它的jQuery请求参数
+	默认实现中，当Backbone.sync发起一个请求保存模型时，将传递模型的属性，并被序列化为JSON格式，且HTTP请求中content-type为application/json。返回JSON响应的时候，将返回被服务器修改过的，需要更新到客户端的模型属性。当响应集合的"read"请求，将发送一组模型属性对象。
+	sync方法可被全局重载为Backbone.sync，或者更好的，给一个Backbone集合或者一个独立的模型添加sync方法。
+	默认的sync为CRUD和REST提供映射：
+	.create——>POST	/collection
+	.read——>GET	/collection[/id]
+	.update——>put	/collection/id
+	.delet——>DELETE	/collection/id
+	例如，Rails中，响应Backbone的"update"调用可能是这样的（实际编程时，不要盲目使用update_attributes，而应该总是使用白名单来进行访问控制）
+	def update
+		account = Account.find params[:id]
+		account.update_attributes params
+		render :json => account
+	end
+	集成到Rails的另一个提示：设置ActiveRecord::Base.include_root_in_json = false，关闭默认命名空间下的to_json方法。
+
+emulateHTTP	Backbone.emulateHTTP = true
+	如果你在不支持Backbone的默认REST/http调用的老师web服务器上工作，你需要开启Backbone.emulateHTTP。设置了该选项，将用HTTP post请求伪造PUT和DELETE请求，用该方法设置X-HTTP-Method-Override头部。如果还打开了emulateJSON，该方法将传递一个附加的_method参数。
+	Backbone.emulateHTTP = true;
+	model.save();	//用"_method=PUT" + header，post到"/collection/id"
+
+
+
+Backbone.View
+	Backbone视图比计划的更便利——他们不会替你的HTML和CSS决定任何事情，可以和任何JavaScript模板类搭配使用。主要思想是整合界面和逻辑视图，后面是模型，所有这些可以在模型发生改变时自动升级，而不需要重绘页面。不需要再生成JSON对象，查找DOM中的元素，再手动升级HTML，你可以将视图中的render方法和模型中的change事件绑定——现在，UI中所有显示模型数据的地方，都将立即自动更新。
+
+extend	Backbone.View.extend(properties, [classProperties])
+	通过创建一个自定义视图类使用视图。你需要重载render方法来定义事件，和视图的最主要的tagName，className和id这样的视图元素。
+	var DocumentRow = Backbone.View.extend({
+		tagName: "li",
+		className: "document-row",
+		events: {
+			"click .icon": "open",
+			"click .button.edit":	"openEditDialog",
+			"click .button.delete": "destroy"
+		},
+		render: function(){
+			...
+		}
+	});
+
+constructor/initialize	new View([options])
+	定义一个新视图时，传递的options参数将会附加到view中作为this.options，供将来引用。而有一些特殊的options，如果传递了，将会直接附加到view中：model，collection，el，id，className，tagName以及attributes。如果视图定义了一个initialize方法，在视图第一次创建的时候将会调用。如果你希望创建一个DOM中已经存在的元素的视图引用，传递该元素作为参数：new View({el: existingElement})
+	var doc = Documents.first();
+	new DocumentRow({
+		model: doc,
+		id: "document -row-" + doc.id
+	});
+
+el	view.el
+	任何时候所有视图都有一个DOM元素（el属性），不管该视图是否已经插入到页面中去。这样，视图可以在任何时候加载，而只需插入DOM中一次，这样可以尽量减少reflows和repaints而获得搞高性能的UI渲染。如果定义了视图的tagName，className，id，将直接生成this.el。否则，el将是一个空div。
+	var ItemView = Backbone.View.extend({
+		tagName: 'li'
+	});
+	var BodyView = Backbone.View.extend({
+		el: 'body'
+	});
+	var item = new ItemView();
+	var body = new BodyView();
+	alert(item.el + ' ' + body.el);
+
+$el	view.$el
+	视图元素的缓存jQuery（或者Zepto）对象。不需要总是获取DOM元素的便利的引用。
+	view.$el.show();
+	listView.$el.append(itemView.el);
+
+setElement	view.setElement(element)
+	如果你希望将Backbone视图应用到不同的DOM元素中，使用setElement，它将会创建一个$el引用，并将事件从老元素绑定到新的元素上去。
+
+attributes	view.attributes
+	一组hash属性，将会设置为视图el中的DOM元素属性（id，class，data-ptoperties等等），或者一个发挥同样hash的函数。
+
+$(jQuery or Zepto)	view.$(selector)
+	如果页面中包含了jQuery或者Zepto，每一个视图都将包含一个$方法，用来查询视图元素。如果你使用的jQeruy，使用模型id来查询列表中的元素就不是必须的了，你可以更多的使用HTML类属性，这和view.$el.find(selector)是一样的。
+	ui.Chapter = Backbone.View.extend({
+		serialize: function(){
+			return {
+				title: this.$(".title").text(),
+				start: this.$(".start-page").text(),
+				end:   this.$(".end-page").text()
+			};
+		}
+	});
+
+render	view.render()
+	默认的render实现是无参的。在你的代码中重载该方法，来使用模型数据渲染视图模板，并用新的HTML更新this.el。较好的习惯是在render的最后return this，支持链式调用。
+	var Bookmark = Backbone.View.extend({
+		render: funciton(){
+			$(this.el).html(this.template(this.model.toJSON()));
+			return this;
+		}
+	});
+	Backbone依赖于先前关于HTML模板的实现。render方法甚至可以补全HTML字符串，或者使用document.createElement来生成DOM树。然而，我们建议采用一个好的JavaScript模板类：Mustach.js，Haml-js，Eco都是很好的选择。由于页面中包括了Underscore.js，_.template可以使用，如果你已经有了防XSS攻击的数据，这也是一个不错的选择。
+	不论你最终采用了那种模板策略，从来不在JavaScript中设置HTML代码都是非常好的。在DocumentCloud中，我们使用Jammit，来打包JavaScript模板，并作为core.js包的一部分保存在/app/views中
+
+remove	view.remove()
+	从DOM中移除视图的便利方法。等同于调用$(view.el).remove();
+
+make	view.make(tagName, [attributes], [content])
+	使用可选属性和HTML内容，创建一个给定类型（tagName）的DOM元素的便利方法。通常在外部初始化view.el
+	var view = new Backbone.View;
+	var el = view.make("b", {"class": "bold"}, "Bold!");
+	$("#make-demo").append(el);
+
+delegateEvents	delegateEvents([events])
+	使用jQuery的delegate方法，为有一个视图的DOM事件提供回调。如果events哈希没有被正确的传递，使用this.events。事件以{"event selector": "callback"}的方式书写。回调函数可以是视图中的一个函数名，或者直接是一个函数体。如果省略了selector，事件将直接绑定到视图的根元素this.el上。默认情况下，delegateEvets将在视图的构造函数中调用，所以如果你有一个简单的events散列表，所有的DOM时间将建立连接，你不需要再自己调用函数。
+	events属性同样可以是一个返回events散列表的函数，将使编程更容易，同样继承至父视图。
+	使用delegateEvents，在渲染期间，相对于手动使用jQuery为子元素绑定事件，提供了更多的便利。在交给jQuery前，所有回调函数都与视图绑定，当回调函数调用时，this继续指向view对象。当delegateEvents再次执行的时候，可能是不同的events散列表，所有的回调函数将移除，并重新触发——对于在不同模型中有不同显示的视图而言非常有用。
+	在搜索结果中显示的视图可能看起来是这样的：
+	var DocumentView = Backbone.View.extend({
+		events: {
+			"dbclick"			: "oepn",
+			"click .econ.doc"	: "select",
+			"contextmenu .icon.doc"	: "showMenu",
+			"click .show_notes"	: "toggleNotes",
+			"click .title .lock": "edietAccesslevel",
+			"nouseover .title .date"	: "showTooltip"
+		},
+		render: function(){
+			$(this.el).html(this.template(this.model.toJSON()));
+			return this;
+		},
+		open: function(){
+			window.open(this.model.get("viewer_url"));
+		},
+		select: function(){
+			this.model.set({select: true});
+		},
+		...
+	});
+
+undelegateEvents	undelegateEvents()
+	移除视图中所有委托的事件。当你希望使临时DOM中的视图无效，或者移除它时，这很有用。
+
+
+
+Utility Functions
+noConflict	var backbone = Backbone.noConflict();
+	将Backbone对象设置为原始的值。你可以使用Backbone.noConflict()的返回的值，保存一份对Backbone的本地引用。在讲Backbone植入第三方网站，而你不希望覆盖已有的Backbone时，这很有用。
+	var localbackbone = Backbone.noConflict();
+	var model = localBackbone.Model.extend(...);
+
+setDomLibrary	Backbone.setDomLibrary(jQueryNew);
+	如果你在页面中有jQuery的多份拷贝，或者仅仅是告诉Backbone使用一个特定对象作为它的DOM/Ajax库，该函数很有用。
