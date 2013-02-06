@@ -108,7 +108,8 @@ Meteor.publish(name, func)											Server
 		//客户端：使用新集合
 		console.log("Corrent room has " + Counts.findOne().count + " mesages.");
 	
-	注意：如果你在调用Meteor.publish时，包含了autopublish包，Meteor将会产生一条警告。发布函数仍然会工作。
+		注意：
+		如果你在调用Meteor.publish时，包含了autopublish包，Meteor将会产生一条警告。发布函数仍然会工作。
 	
 this.userId															Server
 	在发布函数中获取。当前登录用户的id，如果用户未登录，返回null。
@@ -316,7 +317,8 @@ Meteor.connect(url)													Client
 		· onReconnect - 设置重新建立连接后第一个要调用的方法。该方法可在任何其他方法之前调用。例如，可用于在新连接中重新进行身份认证
 	默认情况下，客户端从它们下载的地方建立与服务器的连接。当你调用Meteor.subscribe, Meteor.status, Meteor.call, 以及Meteor.apply时，你使用的与默认服务器的连接。
 	
-	注意：在本发行版本中，Meteor.connect只能在客户端调用，服务器不能与其它服务器建立连接。
+		注意：
+		在本发行版本中，Meteor.connect只能在客户端调用，服务器不能与其它服务器建立连接。
 	
 
 （五）集合
@@ -345,29 +347,361 @@ new Meteor.Collection(name [, options])								Anywhere
 	特别的，当你传递了一个name时，发生了如下事情：
 		· 在服务器端，在后端Mongo服务中创建同样名字的集合。当你在服务器端在集合上调用方法时，它们直接转换为普通的Mongo运算符（在检查满足你设置的规则之后）
 		· 在客户端，建立了一个Minimongo实例。Minimongo本质上来说是一个内存中的、非永久保存的用纯JavaScript实现的Mongo。像本地缓存一样工作，用来存储客户端工作的数据子集。客户端的查询（find）将直接在缓存中进行，而不需要调用服务器。
-		· 当你在客户端写数据库时（insert, update, remove），命令将立刻在客户端执行，同时，将传一份到服务器，并在那儿运行。
+		· 当你在客户端对数据库进行写操作时（insert, update, remove），命令将立刻在客户端执行，同时，将传一份到服务器，并同样在服务器端运行。livedata包就是用来做这个事情的。
 	如果给name值传为null，就创建了一个本地集合，它不与任何地方同步；仅仅是一个支持Mongo风格find, insert, update, remove操作符的暂存（在客户端和服务器端，暂存都是用Minimongo实现的）。
+	默认情况下，Meteor自动向每一个连接的客户端发布集合中的所有文档。要关掉这一特性，移除autopublish包：
+		$meteor remove autopublish
+	调用Meteor.publish来指明集合中的哪一部分应该被发布给哪一用户。
+		//创建一个名叫Posts的集合，并放入一份文档。
+		//文档将在本地集合拷贝中立即可见。
+		//之后，将被写入服务器端数据库中。
+		//之后，将被同步到任何订阅了该集合的客户端（见Meteor.subscribe 和 autopublish）
+		Posts = new Meteor.Collection("posts");
+		Posts.insert({title: "Hello world", body: "First post");
+		
+		//变化立即可见————不需要等到下一次服务器调用
+		assert(Posts.find().count == 1);
+		
+		//创建一个本地集合，就好像任何其它集合一样
+		//但不会被传递到服务器端，也不会从订阅中获取任何数据
+		Scratchpad = new Meteor.Collection;
+		for (var i = 0; i < 10; i++) {
+			Scratchpad.insert({number: i * 2});
+		}
+		assert(Scratchpad.find({number: {$lt: 9}}).count() === 5);
+		
+		注意：
+		本发布版本中，Minimongo有一定局限：
+			· $elemMath不支持选择器
+			· modifiers中的$pull只能支持部分选择器
+			· 选择器中，.符号可能工作不正确
+			· modifiers不支持$中指明匹配数组位置
+			· 不支持findAndModify，upsert，aggregate，map，reduce方法
+			· 支持的类型包括String, Number, Boolean, Array, Object
+		所有这些将在未来版本中修复。详细Minimongo发布记录，见本仓库的packages/minimongo/NOTES中。
+		
+		当前的MiniMongo没有索引。马上就有了。由于客户端通常没有那么多的数据，所以通常情况下这不是问题————无论如何开发者在其客户端模型中实现索引并不常见。
+		
+collection.find(selector, [options])								Anywhere
+	在集合中寻找匹配selector的文档
+		参数
+			selector			Object: Mongo选择器，或String
+			查询
+		Options
+			sort				Object: 排序方法说明
+			排序顺序（默认：自然排序）
+			skip				Number
+			结果开头跳过的数量
+			limit				Number
+			返回结果最大数
+			fields				Object: 域说明
+			（仅用于服务器端）结果中要包含或不包含的项
+			reactive			Boolean
+			（仅用于客户端）默认为true；传false则关闭反应式
+	find返回一个cursor。它并不马上访问数据库或返回文档。Cursors提供fetch方法返回所有匹配的文档，map和forEach迭代整个文档，observe注册文档发生变化时的回调函数。
+		注意：
+		集合cursors不是查询快照。如果在调用Collection.find和获取cursor结果或正在从cursor中获取结果期间，数据库发生变化，这些变化可能会可能不会反应在结果集中。
+	Cursors是反应式数据源。你第一次在反应式上下文中通过调用fetch, map或forEach来检索cursor的文档（例如Meteor.render或Meteor.autosubscribe），Meteor将注册依赖到基本数据。在cursor中，任何对集合中文档的改变都将触发recomputation。要关闭这一特性，传递find的选项{reactive:false}
+	
+collection.findOne(selector, [options])								Anywhere
+	返回通过sort排序和skip选择约束下匹配selector的第一个文档。
+		参数
+			selector		Object: Mongo选择器，或String
+			查询
+		Options
+			sort				Object: 排序方法说明
+			排序顺序（默认：自然排序）
+			skip				Number
+			结果开头跳过的数量
+			limit				Number
+			返回结果最大数
+			fields				Object: 域说明
+			（仅用于服务器端）结果中要包含或不包含的项
+			reactive			Boolean
+			（仅用于客户端）默认为true；传false则关闭反应式
+	等同于find(selector, options).fetch()[0]
+	
+collection.insert(doc, [callback])									Anywhere
+	向集合中插入一个文档，返回其唯一_id
+		参数
+			doc			Object
+			将要插入的文档。不能已经有_id属性
+			callback	Function
+			可选。如果存在，调用时，第一个参数是error对象，如果没有错误，第二个参数为_id
+	向集合中插入一个文档。文档仅仅是一个对象，其域可包括任意JSON兼容的数据类型集合（arrays, objects, numbers, strings, null, true, false）。
+	insert将为传递的对象生成唯一ID，插入到数据库中，返回ID。
+	在服务器端，如果未提供回调，insert函数将阻塞，直到数据库完成写操作，或假如有问题抛出异常。如果提供了回调，insert将立刻返回ID。一旦插入完毕（或失败），回调函数将随着错误或结果一起调用。在失败的情况下，result是undefined。如果插入成功，error是undefined，result是新文档的ID。
+	在客户端，insert从不阻塞。如果未提供回调，而服务器端插入失败，Meteor将向控制台打印警告信息。如果提供了回调，Meteor将用error和result参数调用回调函数。在失败的情况下，result是undefined。如果插入成功，error是undefined，result是新文档的ID。
+	例：
+		var groceriesId = Lists.insert({name: "Groceries"});
+		Items.insert({list: groceriesId, name: "Watercress"});
+		Items.insert({list: groceriesId, name: "Persimmons"});
+		
+collection.update(selector, modifier, [options], [callback])		Anywhere
+	改变集合中的一个或多个文档
+		参数
+			selector		Object: Mongo选择器，或String
+			指明要改变哪一个文档
+			modifier		Object: Mongo修改器
+			指明如何修改文档
+			callback		Function
+			可选的。如果有，随着error对象一起调用
+		Options
+			multi			Boolean
+			为true，则修改所有匹配文档。false，则修改匹配到的一个文档（默认）。
+	用modifier来修改匹配到selector的文档。默认情况下，仅修改匹配到的一个文档。如果multi为true，则修改所有匹配文档。
+	除了传递一个选择器，你还可以传一个字符串，将别作为_id解析。
+	在服务器端，如果未提供回调，update函数将阻塞，直到数据库完成写操作，或假如有问题抛出异常。如果提供了回调函数，update将立刻返回。一旦更新完毕，回调函数将立刻被调用，如果失败，则返回error参数，成功则无参。
+	在客户端，update从不阻塞。如果未提供回调，而服务器端插入失败，Meteor将向控制台打印警告信息。如果提供了回调，update将立刻返回。一旦更新完毕，回调函数将立刻被调用，如果失败，则返回error参数，成功则无参。
+	例：
+		//给所有积分大于10的用户“Superlative”勋章。
+		//如果用户当前登录，且屏幕上显示了勋章列表，将自动更新可见
+		Users.update({score: {$gt: 10}},
+					 {$addToSet: {badges: "Superlative"}},
+					 {multi: true});
+		注意：
+		Mongo upsert特性暂时未实现
+	
+collection.remove(selector, [callback])								Anywhere
+	从集合中移除文档
+		参数
+			selector		Object: Mongo选择器，或String
+			指明那些文档将被移除
+			callback		Function
+			可选。如果提供，参数中包含error对象
+	从集合中删除与selector匹配的所有文档。或者可以传递一个字符串，来删除该_id对应的文档。安全考考，如果没有匹配到任何文档，什么也不做。如果选择器是{}，则删除集合中的所有文档。
+	在服务器端，如果未提供回调，remove函数将阻塞，直到数据库完成写操作，或假如有问题抛出异常。如果提供了回调函数，remove将立刻返回。一旦更新完毕，回调函数将立刻被调用，如果失败，则返回error参数，成功则无参。
+	在客户端，remove从不阻塞。如果未提供回调，而服务器端插入失败，Meteor将向控制台打印警告信息。如果提供了回调，remove将立刻返回。一旦更新完毕，回调函数将立刻被调用，如果失败，则返回error参数，成功则无参。
+	例：
+		//删除所有karma小于-2的用户
+		Users.remove({karma: {$lt: -2}});
+		//删除所有日志记录
+		Logs.remove({});
+		
+collection.allow(options)											Server
+	允许用户直接通过客户端代码写集合。你可以定义受限项。
+		options
+			insert, update, remove		Function
+			检查对数据库的修改意向。如果可被允许，返回true
+			fetch						String类型的数组
+			可选的增强。限制为了检查update和remove函数需要从数据库获取的字段。
+	客户端调用集合的insert，update或remove方法时，将会调用服务器端的allow和deny回调函数，来检查是否允许该写操作。如果有至少一个allow回调允许写操作，没有deny回调拒绝，则执行该写操作。
+	这些检查，仅发生在直接从客户端写数据库操作时。例如在事件handler中调用update。服务器端代码可信任，不需要受限于allow和deny限制。这包括通过Meteor.call调用的方法————它们应该使用它们自己的检查函数，而不是依赖于allow和deny函数。
+	你可以调用allow方法任意多次，每一次调用可以包括insert，update和remove函数的任意组合。如果认为操作可被执行，则返回true，否则返回false，或什么也不返回（undefined）。这种情况下，Meteor将继续搜索集合中其它allow规则。
+	可能的回调函数包括：
+		insert(userId, doc)
+			userId的用户向集合中插入doc文档。如果操作允许，返回true。
+		update(userId, docs, fields, modifier)
+			userId的用户想要更新一些文档。Meteor从数据库中获取文档，并可从docs中作为数组获取。如果用户可修改这些文档，返回true。
+			关于提交修改的更多细节在fields和modifier中。fields是客户端想要修改的文档最高层域，例如['name', 'score']。modifier是客户端想要执行的原始的Mongo修改器，例如{$set: {'name.first': "Alice"}, $inc: {score: 1}}
+			仅支持Mongo修改器（类似$set和$push操作符）。如果用户试图替换整个文档，而不是使用$开头的修改器，请求将被直接拒绝而不检查allow函数。
+		remove(userId, docs)
+			userId的用户想要删除一些文档。Meteor从数据库中获取文档，并可从docs中作为数组获取。如果用户可删除这些文档，返回true。
+	默认情况下，Meteor从数据库中获取文档，并赋值到docs数组中，它将返回文档中所有字段。为了更高效，你可能希望仅获取函数中真正需要的字段。可通过开启fetch选项。把fetch设置为希望获取的字段数组。
+	例：
+		//创建一个用户只能修改自己文档的集合。每个文档的从属关系由
+		//“owner”字段来维护。所有文档只能属于创建者，且不可更改。
+		//只有文档的所有者才能删除文档。防止意外删除，可设置“locked”属性
+		Posts = new Meteor.Collection("posts");
+		Posts.allow({
+			insert: function (userId, doc) {
+				//用户必须登录，且该文档属于该用户
+				return (userId && doc.owner === userId);
+			},
+			update: function (userId, docs, fields, modifier) {
+				//只能修改你自己的文档
+				return _.all(docs, function (doc) {
+					return doc.owner === userId;
+				});
+			},
+			remove: function (userId, docs) {
+				//只能删除你自己的文档
+				retur _.all(docs, function (doc) {
+					return doc.owner === userId;
+				});
+			},
+			fetch: ['owner']
+		});
+		
+		Posts.deny({
+			update: function (userId, docs, fields, modifier) {
+				//不能修改所有者
+				return _.contains(fields, 'ownder');
+			},
+			remove: function (userId, docs) {
+				//不能删除已锁定文档
+				return _.any(docs, function (doc) {
+					return doc.locked;
+				});
+			},
+			fetch: ['locked']		//不需要获取“owner”
+		});
+	如果你从未为一个集合设置任何allow规则，所有客户端写集合操作将被拒绝，而只能通过服务器端代码写入该集合。在这种情况下，你必须为每一个允许的可能的写操作创建一个方法，然后通过Meteor.call来调用这些方法，而不是在客户端调用insert，update和remove直接操作集合。
+	Meteor还有一个用来快速创建新应用的特殊的“insecure mode”（非安全模式）。在非安全模式下，如果你没有为集合设置任何allow或deny规则，那么所有用户都有对集合的全部写权限。这只是在非安全模式。如果你调用集合的allow或deny，甚至是Posts.all({})，对集合的检查就像普通模式下那样。新的Meteor项目默认情况下已非安全模式启动。使用$ meteor remove insecure来关闭它。
+		注意：
+		对update和remove来说，只有在获取到的文档通过sllow和deny规则，以及操作真正执行过的时候，文档才会发生变化。通过重写选择器到
+		{$and: [(oringinal selector), {$in: {_id: [(ids of documents fetched and checked by allow and deny)]}}]}来实现。
+	
+collection.deny(options)											Server
+	重写allow规则。
+		options
+			insert, update, remove		函数
+			检查对数据库的修改意向，如果应该拒绝，返回true，即使存在一个allow规则认为可以。
+			fetch						String类的Array
+			可选的增强。限制为了检查update和remove函数需要从数据库获取的字段。
+	与allow类似，除了这是用来让你确认某些写操作绝对被禁止的。如果没有deny规则返回true，然后再执行allow规则。Meteor只在没有deny规则返回true，并且至少有一个allow规则返回true时，才允许写操作。
 	
 	
+（六）Cursors
+	要创建一个cursor，使用find。要获取cursor中的文档，使用forEach，map或fetch。
 	
+cursor.forEach(callback)											Anywhere
+	为每一个匹配的文档调用一次callback，顺序执行，同步。
+		参数
+			callback	Function
+			要调用的函数
+	在反应式环境中调用时，forEach注册到匹配文档的依赖。
+	例：
+		//打印排分头5个的标题
+		var topPosts = Posts.find({}, {sort: {score: -1}, limit: 5});
+		var count = 0;
+		topPosts.forEach(function (post) {
+			console.log("Title of post " + count + ": " + post.title);
+			count += 1;
+		});
+		
+cursor.map(callback)												Anywhere
+	对整个文档调用callback，返回一个数组
+		参数
+			callback	Function
+			要调用的函数
+	在反应式环境中调用时，map注册到匹配文档的依赖。
+	在服务器端，如果调用callback，在第一个调用等待时，可能会有其它对callback的调用。如果需要严格按照顺序执行，请使用forEach。
 	
+cursor.fetch()														Anywhere
+	将匹配文档作为数组返回
+	在反应式环境中调用时，fetch注册到匹配文档的依赖。
 	
+cursor.count()
+	返回匹配查询的文档数。
+		//显示匹配特定规则的内容数。并在数据库发生变化时自动更新
+		var frag = Meteor.render(function () {
+			var highScoring = Posts.find({score: {$gt: 10}});
+			return "<p>There are " + highScoring.count() + " posts with" + "scores greater than 10</p>";
+		});
+		document.body.appendChild(frag);
+	和其它函数不同，count注册了对匹配文档数的依赖。（对文档集的修改或重排序不会触发重新计算）
+
+cursor.rewind()														Anywhere
+	重置查询cursor
+	每一个cursor中forEach，map或fetch只能调用一次。要超过一次的获取数据，使用rewind重置cursor。
 	
+cursor.observe(callbacks)											Anywhere
+	监控一个查询。当结果集发生变化时调用callbacks
+		参数
+			callbacks		Object（可能包括added, changed, moved, 和removed函数）
+			当结果集发生变化时调用的函数
+	建立一个动态查询，当查询结果有任何变化时通知回调函数。
+	callbacks可能有以下属性：
+		added(document, beforeIndex)
+			结果集中有了新文档。将立刻在当前beforeIndex位置前插入文档。或如果要在列表的最后插入，beforeIndex将等于（原）列表的长度。
+		changed(newDocument, atIndex, oldDocument)
+			旧文档的atIndex位置的文档变为newDocument
+		moved(document, oldIndex,newIndex)
+			结果集中的文档，从oldIndex更改为newIndex。便于使用，当前的文档为document。这会在changed之后立即调用。
+		removed(oldDocument, atIndex)
+			位于atIndex位置的文档oldDocument，将不再在结果集中存在。
+	需要发送初始结果的话，added可立刻被调用。
+	observe返回动态查询句柄，这是一个有stop方法的对象。无参调用该函数将停止调用回调函数，并关闭查询。在调用该方法之前，查询会一直进行。
+	例：
+		//跟踪当前多少管理员在线
+		var count = 0;
+		var query = Users.find({admin: true, onlineNow: true});
+		var handle = query.observe({
+			added: function (user) {
+				count++;
+				console.log(user.name + " brings the total to " + count + " admins.");
+			},
+			removed: function () {
+				count--;
+				console.log("Lost one. We're now down to " + count + " admins.");
+			}
+		});
+		//5秒后，停止计数
+		setTimeout(function () {handle.stop();}, 5000);
+		
+Meteor.uuid()														Anywhere
+	返回一个全局唯一标识
+	返回一个形如b6df7139-df0b-4daa-8c9e-b432a90bc048的可能是世界上唯一的随机字符串。字符串格式参见RFC 4122 v4格式。
+		注意：
+		当前Meteor使用该函数为新建Mongo文档生成_id字段。未来，我们可能会转向本地二进制Mongo IDs。那时，该函数将被复制或移动到单独的包中。
+		注意：
+		当前实现版本，返回的字符串，以当前时间为种子生成的伪随机数。生成的UUIDs完成不够随机，不可用于加密和安全目的。
+		
+Mongo风格选择器
+	其最简形式，选择器仅仅是一个文档中必须匹配的键集合
+		//匹配所有deleted为false的文档
+		{deleted: false}
+		//匹配name和cognomen与所给匹配的文档
+		{name: "Rhialto", cognomen: "the marvelous"}
+		//匹配所有文档
+		{}
+	它们也可以包含更复杂的条件：
+		//匹配年龄大于18的文档
+		{age: {$gt: 18}}
+		//匹配tags是一个包含popular的数组的文档
+		{tag: "popular"}
+		//匹配水果为三个中的一个的文档
+		{fruit: {$in: ["peach", "plum", "pear"]}}
+	参见详细文档
 	
+Mongo风格的修改器
+	修改器是描述如何通过修改其字段来更新文档的对象。一些例子：
+		//设置文档中的“admin”属性为true
+		{$set: {admin: true}}
+		//为“vote”增加2，为“supporters”数组最后增加“Traz”
+		{$inc: {votes: 2}, $push: {supporters: "traz"}}
+	如果修改器没有包含任何$开始的操作符，将会作为文字文档解析，替换掉数据库中原本存在的任何数据（校验更新（Meteor.allow）暂时不支持文字文档）
+		//找到id为123的文档，完全替换掉它
+		Users.update({_id: "123"}, {name: "Alice", friends: ["Bob"]});
+	插件修改器列表
 	
+SortSpecifiers
+	可通过使用一些语法改变排序
+		//所有都做同样的事：
+		//sort in ascending order by key 'a', breaking ties in descending order of key "b"
+		//关键字a为升序，关键字b为降序
+		[["a", "asc"], ["b", "desc"]]
+		["a", ["b", "desc"]]
+		{a: 1, b: -1}
+	最后一种情况，仅在你的JavaScript实现保有对象中的键排序。大多数情况下可以，但需要你确认。
 	
+Field Specifiers
+	在服务器端，可为查询指定结果集中要包含或排除的字段（目前客户端忽略字段指定器）
+	要从结果集中排除特定字段，字段指定器是一个对象，其键为字段，值为0
+		User.find({}, {fields: {password: 0, hash: 0}})
+	要返回仅包含指定字段的对象，值为1。_id字段同样包含在结果集中
+		User.find({}, {fields: {firstname: 1, lastname: 1}})
+	不能混合使用包含和排除。
 	
+（七）Sessions
+	Session在客户端提供一个可以存储任意键值对的全局对象。使用它来存储数据，就好像在列表中获取项一样。
+	Session特殊的是它是反应式的。如果在模板中调用Session.get("currentList")，无论何时调用Session.set("currentList", x)，模板将自动更新。
 	
+Session.set(key, value)												Client
+	设置一个session。值改变时，触发所有监听函数（例：重绘模型，返回一个Meteor.autosubscribe模块，将在key上调用Session.get）
+		参数
+			key		String
+			要设置的键，例：selectedItem
+			value	可JSON化的对象或undefined
+			key对应的新值
+	例：
+		Meteor.autosubscribe(function () {
+			Meteor.subscribe("chat-heistory", {room: Session.get("currentRoomId")});
+		});
+		//导致传递给Meteor.autosubscribe的函数再次运行，chat-history订阅移动到“home”房间
+		Session.set("currentRoomId", "home");
+	Meteor.deps中有另一个示例
 	
-	
-	
-	
-	
-	
-	
-	
-	
-	
-	
-	
-	
+Session.get(key)													Client
+	获取session中的值。
