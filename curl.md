@@ -199,9 +199,30 @@ HTTP POSTing
 	/* 释放头列表 */
 	curl_slist_free_all(headers);
 
-以上示例覆盖了HTTP POST请求需要的主要参数，它们不包括multi-part 域post。
-	curl_easy_perform(easyhandle);
+以上示例覆盖了HTTP POST请求需要的主要参数，但不包括Multi-part formpost多部分表单提交。Multi-part formpost是第一次在RFC 1867（在RFC 2388中更新）中提出的，据说提交（可能大的）二进制文件一种更好的方式。命名为multi-part，是因为由一系列数据组成，各个部分是独立的数据单元。每一部分有自己的名字和内容。实际上你可以用上述的libcurl POST来提交multi-part formpost，但这需要你自己实现formpost，并提供给libcurl。为了使用方便，libcurl提供了curl_formadd。用该函数，你向一个form表单增加各个部分。加完之后，再提交整个表单。
+如下示例展示了设置简单文本到文本项，再添加一个二进制文件，最后一起提交
 
+	struct curl_httppost *post = NULL;
+	struct curl_httppost *last = NULL;
+	curl_formadd(&post, &last, CURLFORM_COPYNAME, "name", CURLFORM_COPYCONTENTS, "daniel", CURLFORM_END);
+	curl_formadd(&post, &last, CURLFORM_COPYNAME, "project", CURLFORM_COPYCONTENTS, "curl", CURLFORM_END);
+	curl_formadd(&post, &last, CURLFORM_COPYNAME, "logotype-image", CURLFORM_COPYCONTENTS, "curl.png", CURLFORM_END);
+	
+	/* 设置form信息 */
+	curl_easy_setopt(easyhandle, CURLOPT_HTTPPOST, post);
+	curl_easy_perform(easyhandel);  /*发送请求*/
+	/*再次释放数据*/
+	curl_formfree(post);
+Multi-part formposts，使用MIME-style元数据格式的分隔符和头的一系列数据。这意味着每一部分都又一小部分设置了独立数据类型的头。来使你的应用程序更多的获取数据。libcurl允许你为这样的独立表单部分设置自定义的头。当然你可以如你所愿的设置尽可能多的小部分，本小示例展示了在一个post handle中为一个指定部分设置头部：
+
+	struct curl_slit *headers = NULL;
+	headers = curl_slist_append(headers, "Content-Type: text/xml");
+	curl_formadd(&post, &last, CURLFORM_COPYNAME, "logotype-image", CURLFORM_COPYCONTENTS, "curl.png", CURLFORM_CONTENTHEADER, headers, CURLFORM_END);
+	curl_easy_perform(easyhandel);  /*发送请求*/
+	curl_formfree(post); /*释放数据*/
+由于所有的easyhandle的操作都是“胶着”的，在你调用`curl_easy_perform`后他们仍然生效。你可能需要告诉curl接下来的请求将继续退回使用GET请求。强制一个easyhandle使用GET请求，使用`CURLOPT_HTTPGET`：
+
+	curl_easy_setopt(easyhandle, CURLOPT_HTTPGET, 1L);
 
 
 
