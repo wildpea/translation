@@ -223,9 +223,42 @@ Multi-part formposts，使用MIME-style元数据格式的分隔符和头的一�
 由于所有的easyhandle的操作都是“胶着”的，在你调用`curl_easy_perform`后他们仍然生效。你可能需要告诉curl接下来的请求将继续退回使用GET请求。强制一个easyhandle使用GET请求，使用`CURLOPT_HTTPGET`：
 
 	curl_easy_setopt(easyhandle, CURLOPT_HTTPGET, 1L);
+仅仅将`CURLOPT_POSTFIELDS`设置为""，或是NULL，都 不会 使得libcurl停止使用POST。仅仅是以POST方式请求而不携带任何数据。
 
+展示过程
+=======
+由于历史原因，libcurl有一个可以打开的内置进度表，可以在终端上打印当前进度。
+打开该进度表的方式较为奇怪，将`CURLOPT_NOPROGRESS`设置为0。该选项默认为1。
+然而对于大多数应用来说，不关心内置进度表，而是关心如何进程回调的具体说明。该函数指针由你传给libcurl，然后在不确定的间隔后返回当前传输的信息。
+设置进程回调通过`CURLOPT_PROGRESSFUNCTION`。所传递的回调函数的原型：
 
+	int progress_callback(void *clientp, double dltotal, double dlnow, double ultotal, double ulnow);
+	
+如果任一输入参数不确定，传0即可。第一个参数`clientp`，是你通过`CURLOPT_PROGRESSDATA`传给libcurl的数据，libcurl不会动它。
 
+C++中使用libcurl
+========
+在C++而不是C中使用libcurl，基本上只需要记住一件事情：
+回调函数 不能 是非静态类成员函数
+C++代码示例：
+
+	class AClass {
+		static size_t write_data(void *ptr, size_t size, size_t nmemb, void *ourpointer)
+		{
+			/*你处理数据的代码*/
+		}
+	}
+
+使用代理
+=======
+韦氏词典中对proxy“代理”的定义：“一个人被授权代替另一个人”，也同样定义为“代理，智能，或公务副手，可以代替另外一个人”。
+近日代理非常普遍。公司通常提供代理供雇员访问网络。网络客户端或用户代理使用文本访问代理，代理执行真正的请求，并返回结果。
+libcurl支持SOCKS和HTTP代理。当相要访问指定URL时，libcurl将会询问代理，而不是尝试自己根据URL去访问资源。
+如果你使用的是SOCKS代理，可能会发现libcurl并不支持所有的操作。
+对于HTTP代理，实际上是一个普通的HTTP代理，包含了权限控制可以做什么。一个URL请求可能不是HTTP URL，也可以传递给HTTP 代理，并传回给libcurl。有时候会发生，应用可能不需要了解。我说“可能”，是因为有时候，理解使用HTTP协议的HTTP代理，非常重要。例如，你不可以哪怕是在合适的FTP目录列表中使用自定义的FTP命令。
+
+Proxy选项
+=====
 
 
 
